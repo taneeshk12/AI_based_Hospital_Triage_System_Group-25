@@ -1,56 +1,72 @@
 #!/bin/bash
 
-# 🫁 Respiratory Agent - Complete Startup Script
-# This script starts both the backend API and frontend UI
+# OmniHealth Diagnostics - System Startup Script
+# This script starts both the backend Flask API and frontend Vite UI.
 
-echo ""
-echo "=========================================="
-echo "🫁 Respiratory Agent System"
-echo "=========================================="
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+echo "=========================================================="
+echo "🩺 OmniHealth Diagnostics: Multi-Agent Triage Dashboard"
+echo "=========================================================="
 echo ""
 
-# Check if backend is already running
-if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-    echo "✅ Backend API is already running on http://localhost:8000"
-    BACKEND_RUNNING=true
+# 1. Start Python Backend API
+echo "Starting Backend API server..."
+cd "$SCRIPT_DIR"
+
+if [ -f "../.venv/bin/python" ]; then
+    PYTHON_BIN="../.venv/bin/python"
 else
-    echo "❌ Backend API is not running"
-    BACKEND_RUNNING=false
+    PYTHON_BIN="python3"
 fi
 
+# Run the backend in the background
+$PYTHON_BIN api_server.py > backend.log 2>&1 &
+BACKEND_PID=$!
+
+# Wait briefly and check if the backend started
+sleep 2
+if kill -0 $BACKEND_PID 2>/dev/null; then
+    echo "✅ Backend API is running in background (PID: $BACKEND_PID, logging to hcai_project/backend.log)"
+else
+    echo "❌ Failed to start Backend API. Check hcai_project/backend.log for errors."
+    exit 1
+fi
+
+# 2. Start React Frontend
 echo ""
-echo "To start the complete system:"
+echo "Starting React Frontend dev server..."
+cd "$SCRIPT_DIR/ui"
+
+# Run Vite dev server
+npm run dev &
+FRONTEND_PID=$!
+
 echo ""
-echo "1️⃣  If not running, start the backend in a NEW terminal:"
-echo "   cd /Users/taneeshkpatel/Desktop/OVGU_Projects/agent-training"
-echo "   source .venv/bin/activate"
-echo "   python api_server.py"
+echo "=========================================================="
+echo "🚀 System is launching!"
+echo "   - Backend API: http://localhost:8000"
+echo "   - Frontend UI: http://localhost:5173"
 echo ""
-echo "2️⃣  Start the React frontend in THIS or ANOTHER terminal:"
-echo "   cd /Users/taneeshkpatel/Desktop/OVGU_Projects/respiratory-ui"
-echo "   npm start"
-echo ""
-echo "Then open your browser to: http://localhost:3000"
-echo ""
-echo "=========================================="
-echo "API Endpoints:"
-echo "=========================================="
-echo "GET  http://localhost:8000/health              - Health check"
-echo "POST http://localhost:8000/predict             - Single prediction"
-echo "POST http://localhost:8000/batch               - Batch predictions"
-echo "GET  http://localhost:8000/model-info          - Model metadata"
-echo "GET  http://localhost:8000/example-patients    - Example patients"
-echo ""
-echo "=========================================="
+echo "Press Ctrl+C to stop both backend and frontend servers."
+echo "=========================================================="
 echo ""
 
-if [ "$BACKEND_RUNNING" = true ]; then
-    echo "Backend Status: ✅ RUNNING"
+# Clean up background processes on exit
+cleanup() {
     echo ""
-    echo "You can now start the frontend:"
-    echo "cd /Users/taneeshkpatel/Desktop/OVGU_Projects/respiratory-ui && npm start"
-else
-    echo "Backend Status: ⏸️  NOT RUNNING"
-fi
+    echo "Shutting down servers..."
+    kill $BACKEND_PID 2>/dev/null
+    kill $FRONTEND_PID 2>/dev/null
+    echo "Done."
+    exit 0
+}
 
-echo ""
+trap cleanup INT TERM
+
+# Keep script running
+while true; do
+    sleep 1
+done

@@ -46,75 +46,33 @@ An ultra-modern, production-ready clinical decision support dashboard leveraging
 ## 📁 2. Project Directory Structure
 
 ```
-OVGU_Projects/
-├── agent-training/                     # Backend Workspace & ML Models
-│   ├── api_server.py                   # Production Flask API Server
-│   ├── respiratory_agent_api.py        # Respiratory Agent wrapper class
-│   ├── cardiac_agent_api.py            # Cardiac Agent wrapper class
-│   ├── sepsis_agent_api.py             # Sepsis Agent wrapper class
-│   ├── general_agent_api_xgboost.py    # General Health Agent wrapper class
-│   ├── data_engineered.csv             # Raw clinical engineered training dataset
-│   ├── example_patient_healthy.json    # Healthy preset patient mock profile
-│   ├── example_patient_high_risk.json  # Critical preset patient mock profile
-│   ├── feedback_log.csv                # Clinician-in-the-loop feedback database
-│   ├── requirements.txt                # Python environment requirements
-│   ├── README.md                       # This documentation file
-│   └── *.joblib / *.pkl                # Trained model pipeline weights
+hcai_project/
+├── api_server.py                   # Production Flask API Server
+├── respiratory_agent_api.py        # Respiratory Agent wrapper class
+├── cardiac_agent_api.py            # Cardiac Agent wrapper class
+├── sepsis_agent_api.py             # Sepsis Agent wrapper class
+├── general_agent_api_xgboost.py    # General Health Agent wrapper class
+├── START_SYSTEM.sh                 # Unified startup script
+├── feedback_log.csv                # Clinician-in-the-loop feedback database
+├── requirements.txt                # Python environment requirements
+├── README.md                       # This documentation file
+├── setup.md                        # Installation and startup instructions
+├── *.joblib / *.pkl                # Trained model pipeline weights
 │
-└── respiratory-ui/                     # Frontend Workspace
+└── ui/                             # Frontend Workspace (Vite + React)
     ├── src/
-    │   ├── App.js                      # React application entry point (App.jsx clone)
-    │   ├── App.css                     # Premium theme and layout styles (App.css clone)
-    │   └── index.js                    # React DOM renderer
-    ├── package.json                    # NPM dependencies
-    └── public/                         # Public static web assets
+    │   ├── App.jsx                 # React application entry point
+    │   ├── App.css                 # Premium dashboard styles
+    │   └── main.jsx                # React DOM renderer
+    ├── package.json                # NPM dependencies
+    └── vite.config.js              # Vite configuration
 ```
 
 ---
 
 ## 🚀 3. Installation & Setup
 
-### Prerequisites
-- **Python** (v3.9 or higher)
-- **Node.js** (v16 or higher) and **NPM** (v8 or higher)
-
-### Step 1: Start the Python Backend API
-1. Navigate to the backend directory:
-   ```bash
-   cd agent-training
-   ```
-2. Create and activate a Python virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   ```
-3. Install the dependencies:
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-4. Start the Flask server:
-   ```bash
-   python3 api_server.py
-   ```
-   The backend will launch at **`http://localhost:8000`**.
-
-### Step 2: Start the React Frontend Dashboard
-1. Open a new terminal window and navigate to the frontend directory:
-   ```bash
-   cd respiratory-ui
-   ```
-2. Install npm dependencies:
-   ```bash
-   npm install
-   ```
-3. Start the React development server:
-   ```bash
-   npm start
-   ```
-   The dashboard will automatically open in your browser at **`http://localhost:3000`**.
-
----
+For full installation and setup instructions to run the Python backend and React frontend, please refer to **[setup.md](./setup.md)**.
 
 ## 🧪 4. Model Weights & Configurations
 

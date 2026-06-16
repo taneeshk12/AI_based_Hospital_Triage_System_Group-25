@@ -10,3 +10,5 @@ seaborn
 shap
 imbalanced-learn
 werkzeug
+groq
+python-dotenv

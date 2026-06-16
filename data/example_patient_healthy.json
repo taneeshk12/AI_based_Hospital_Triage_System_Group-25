@@ -1,0 +1,13 @@
+{
+  "spo2": 95.0,
+  "respiratory_rate": 18.0,
+  "respiratory_distress_index": 0.0,
+  "spo2_risk_score": 0.0,
+  "rr_risk_score": 0.0,
+  "temp_risk_score": 0.0,
+  "temperature": 37.0,
+  "heart_rate": 80.0,
+  "age": 60.0,
+  "sex": "M",
+  "age_group": "senior"
+}

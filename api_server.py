@@ -1,3 +1,10 @@
+# Load environment variables from .env before anything else
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed; env vars must be set externally
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from respiratory_agent_api import RespiratoryAgent
@@ -10,6 +17,15 @@ import json
 import os
 import csv
 import numpy as np
+
+# HCAI agents and report generator
+try:
+    from agents.summary_agent import SummaryAgent
+    from reports.report_generator import ReportGenerator
+    _HCAI_AVAILABLE = True
+except ImportError as _e:
+    _HCAI_AVAILABLE = False
+    _HCAI_IMPORT_ERROR = str(_e)
 
 app = Flask(__name__)
 CORS(app)  # Enable React frontend to call this API
@@ -63,6 +79,20 @@ try:
     logger.info("✓ Sepsis Agent loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load sepsis agent: {e}")
+
+# ── HCAI agents (lazy-initialised, safe if agents/ not yet present) ──
+_summary_agent = None
+_report_generator = None
+
+if _HCAI_AVAILABLE:
+    try:
+        _summary_agent = SummaryAgent()
+        _report_generator = ReportGenerator()
+        logger.info("✓ HCAI SummaryAgent + ReportGenerator loaded successfully")
+    except Exception as e:
+        logger.error(f"Failed to load HCAI agents: {e}")
+else:
+    logger.warning(f"HCAI agents not available: {_HCAI_IMPORT_ERROR if '_HCAI_IMPORT_ERROR' in dir() else 'import error'}")
 
 # ==================== RESPIRATORY ENDPOINTS ====================
 
@@ -480,44 +510,176 @@ class OutputAggregator:
 @app.route('/unified/predict', methods=['POST'])
 def unified_predict():
     """
-    Unified endpoint predicting risk across all 4 models
+    Unified endpoint predicting risk across all 4 models.
+    Now enriched with hcai_lite (confidence category + symptom context)
+    from the HCAI agent pipeline — no LLM call, stays fast.
     """
     try:
         patient_data = request.get_json()
-        
+
         results = {
             'timestamp': datetime.now().isoformat(),
             'status': 'success',
             'predictions': {}
         }
-        
+
         if respiratory_agent:
             resp_res = respiratory_agent.predict(patient_data)
             results['predictions']['respiratory'] = json.loads(json.dumps(resp_res, cls=NumpyEncoder))
-        
+
         if general_agent:
             gen_res = general_agent.predict(patient_data)
             results['predictions']['general'] = json.loads(json.dumps(gen_res, cls=NumpyEncoder))
-            
+
         if cardiac_agent:
             card_res = cardiac_agent.predict(patient_data)
             results['predictions']['cardiac'] = json.loads(json.dumps(card_res, cls=NumpyEncoder))
-            
+
         if sepsis_agent:
             sep_res = sepsis_agent.predict(patient_data)
             results['predictions']['sepsis'] = json.loads(json.dumps(sep_res, cls=NumpyEncoder))
-            
-        # Step 1: Run Rule-Based Safety Layer
+
+        # Step 1: Rule-Based Safety Layer (unchanged)
         safety_rules = RuleBasedSafetyLayer.check_vitals(patient_data)
-        
-        # Step 2: Run Output Aggregation
+
+        # Step 2: Output Aggregation (unchanged)
         aggregation = OutputAggregator.aggregate(results['predictions'], safety_rules)
         results['aggregation'] = aggregation
-            
+
+        # Step 3: HCAI Lite enrichment (confidence + symptom context, no LLM)
+        if _summary_agent:
+            try:
+                hcai_lite = _summary_agent.build_lite(
+                    patient_data,
+                    results['predictions'],
+                    aggregation,
+                )
+                results['hcai_lite'] = json.loads(json.dumps(hcai_lite, cls=NumpyEncoder))
+            except Exception as hcai_err:
+                logger.warning(f"HCAI lite enrichment failed: {hcai_err}")
+                results['hcai_lite'] = None
+        else:
+            results['hcai_lite'] = None
+
         return jsonify(results), 200
-        
+
     except Exception as e:
         logger.error(f"Unified prediction error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
+# ==================== HCAI ENDPOINTS ====================
+
+@app.route('/hcai/analyze', methods=['POST'])
+def hcai_analyze():
+    """
+    Full HCAI analysis endpoint.
+
+    Runs all 4 model predictions + full HCAI pipeline:
+        ConfidenceAgent + SymptomAgent + LLMAgent (Groq) + ReportGenerator
+
+    Returns the complete HCAI report as JSON and saves it to hcai_reports/.
+
+    Optional request body fields:
+        patient_id : str  — identifier for the report (default: ANONYMOUS)
+        save_report: bool — whether to persist the report (default: true)
+    """
+    if not _summary_agent or not _report_generator:
+        return jsonify({'error': 'HCAI agents not initialised. Check server logs.'}), 503
+
+    try:
+        body = request.get_json()
+        patient_id = body.pop('patient_id', 'ANONYMOUS') if body else 'ANONYMOUS'
+        patient_name = body.pop('patient_name', 'Anonymous') if body else 'Anonymous'
+        save_report = body.pop('save_report', True) if body else True
+        patient_data = body
+
+        # ── Step 1: Run all 4 model predictions ──────────────────────────
+        predictions: dict = {}
+
+        if respiratory_agent:
+            r = respiratory_agent.predict(patient_data)
+            predictions['respiratory'] = json.loads(json.dumps(r, cls=NumpyEncoder))
+
+        if general_agent:
+            r = general_agent.predict(patient_data)
+            predictions['general'] = json.loads(json.dumps(r, cls=NumpyEncoder))
+
+        if cardiac_agent:
+            r = cardiac_agent.predict(patient_data)
+            predictions['cardiac'] = json.loads(json.dumps(r, cls=NumpyEncoder))
+
+        if sepsis_agent:
+            r = sepsis_agent.predict(patient_data)
+            predictions['sepsis'] = json.loads(json.dumps(r, cls=NumpyEncoder))
+
+        # ── Step 2: Safety layer + aggregation ───────────────────────────
+        safety_rules = RuleBasedSafetyLayer.check_vitals(patient_data)
+        aggregation = OutputAggregator.aggregate(predictions, safety_rules)
+
+        # ── Step 3: Full HCAI pipeline (includes LLM) ────────────────────
+        hcai_full = _summary_agent.build_full(patient_data, predictions, aggregation)
+        hcai_full = json.loads(json.dumps(hcai_full, cls=NumpyEncoder))
+
+        # ── Step 4: Generate structured report ───────────────────────────
+        report = _report_generator.generate(
+            patient_data=patient_data,
+            hcai_full_context=hcai_full,
+            aggregation=aggregation,
+            patient_id=patient_id,
+            save=save_report,
+        )
+        report['patient_name'] = patient_name  # Store name alongside the generated ID
+        report = json.loads(json.dumps(report, cls=NumpyEncoder))
+
+        logger.info(f"HCAI analysis complete: {report['report_id']} | Risk: {report['risk_prediction']}")
+
+        return jsonify({
+            'status': 'success',
+            'report_id': report['report_id'],
+            'timestamp': report['timestamp'],
+            'predictions': predictions,
+            'aggregation': aggregation,
+            'hcai_full': hcai_full,
+            'hcai_report': report,
+        }), 200
+
+    except Exception as e:
+        logger.error(f"HCAI analyze error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/hcai/reports', methods=['GET'])
+def hcai_reports_list():
+    """
+    List the most recent HCAI reports saved to hcai_reports/.
+
+    Query parameters:
+        limit : int — max number of reports to return (default: 20)
+    """
+    if not _report_generator:
+        return jsonify({'error': 'ReportGenerator not initialised.'}), 503
+
+    try:
+        limit = int(request.args.get('limit', 20))
+        reports = _report_generator.list_reports(limit=limit)
+        return jsonify({'status': 'success', 'count': len(reports), 'reports': reports}), 200
+    except Exception as e:
+        logger.error(f"HCAI reports list error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
+@app.route('/hcai/reports/<report_id>', methods=['GET'])
+def hcai_report_detail(report_id: str):
+    """Load a specific HCAI report by ID."""
+    if not _report_generator:
+        return jsonify({'error': 'ReportGenerator not initialised.'}), 503
+    try:
+        report = _report_generator.load_report(report_id)
+        if report is None:
+            return jsonify({'error': f'Report {report_id} not found.'}), 404
+        return jsonify({'status': 'success', 'report': report}), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 400
 
 # ==================== FEEDBACK / HITL ENDPOINT ====================
@@ -566,31 +728,31 @@ def server_error(e):
 
 if __name__ == '__main__':
     print("\n" + "="*70)
-    print("🫁 MULTI-AGENT DIAGNOSTIC API SERVER")
+    print("🩺 OmniHealth Diagnostics — HCAI Multi-Agent API Server")
     print("="*70)
-    print("\n📊 RESPIRATORY ENDPOINTS:")
+
+    print("\n🔵 UNIFIED ENDPOINT (React Dashboard):")
+    print("  POST http://localhost:8000/unified/predict   ← enriched with hcai_lite")
+
+    print("\n🧠 HCAI ENDPOINTS (Full Clinical Decision Support):")
+    print("  POST http://localhost:8000/hcai/analyze      ← full pipeline + LLM + report")
+    print("  GET  http://localhost:8000/hcai/reports      ← list saved reports")
+    print("  GET  http://localhost:8000/hcai/reports/<id> ← load specific report")
+
+    print("\n📊 INDIVIDUAL AGENT ENDPOINTS:")
     print("  POST http://localhost:8000/respiratory/predict")
-    print("  POST http://localhost:8000/respiratory/batch")
-    print("  GET  http://localhost:8000/respiratory/model-info")
-    print("  GET  http://localhost:8000/respiratory/example-patients")
-    
-    print("\n🏥 GENERAL HEALTH ENDPOINTS:")
     print("  POST http://localhost:8000/general/predict")
-    print("  POST http://localhost:8000/general/batch")
-    print("  GET  http://localhost:8000/general/model-info")
-    print("  GET  http://localhost:8000/general/example-patient")
-    
+    print("  POST http://localhost:8000/cardiac/predict")
+    print("  POST http://localhost:8000/sepsis/predict")
+
     print("\n✅ HEALTH CHECK:")
     print("  GET  http://localhost:8000/health")
-    
-    print("\n⏪ LEGACY ENDPOINTS (backward compatibility):")
-    print("  POST http://localhost:8000/predict  → /respiratory/predict")
-    print("  POST http://localhost:8000/batch    → /respiratory/batch")
-    print("  GET  http://localhost:8000/model-info")
-    print("  GET  http://localhost:8000/example-patients")
-    
+
     print("\n" + "="*70)
-    print("Starting server on http://localhost:8000...")
+    print(f"  HCAI Pipeline: {'✓ Active' if _summary_agent else '✗ Not loaded'}")
+    print(f"  Groq LLM:      {'✓ Active' if _summary_agent and _summary_agent.llm_agent._client else '⚠ Fallback (rule-based)'}")
+    print("="*70)
+    print("  Starting server on http://localhost:8000 ...")
     print("="*70 + "\n")
-    
+
     app.run(debug=False, host='0.0.0.0', port=8000)
