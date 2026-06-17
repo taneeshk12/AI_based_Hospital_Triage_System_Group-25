@@ -1,236 +1,222 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip } from 'recharts';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import PdfReportTemplate from './PdfReportTemplate';
-import { useRef } from 'react';
+import Sidebar from './components/Sidebar';
+import TopBar from './components/TopBar';
+import IntakePage from './pages/IntakePage';
+import ResultsPage from './pages/ResultsPage';
+import SimulatorPage from './pages/SimulatorPage';
+import RegistryPage from './pages/RegistryPage';
+import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
 const API_URL = 'http://localhost:8000';
 
-// Custom Aesthetic SVG Icons
-const HeartPulseIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg pulsing-icon">
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
-);
+const CLINICAL_RANGES = {
+  age: { min: 0, max: 120, step: 1 },
+  spo2: { min: 70, max: 100, step: 1 },
+  respiratory_rate: { min: 5, max: 50, step: 1 },
+  temperature: { min: 34.0, max: 42.0, step: 0.1 },
+  heart_rate: { min: 30, max: 200, step: 1 },
+  systolic_bp: { min: 60, max: 240, step: 1 },
+  diastolic_bp: { min: 30, max: 140, step: 1 },
+  wbc: { min: 1.0, max: 50.0, step: 0.1 },
+  hemoglobin: { min: 5.0, max: 25.0, step: 0.1 },
+  platelet_count: { min: 10, max: 1000, step: 5 },
+  sodium: { min: 115, max: 160, step: 1 },
+  potassium: { min: 1.5, max: 8.0, step: 0.1 },
+  creatinine: { min: 0.1, max: 15.0, step: 0.1 },
+  glucose: { min: 20, max: 600, step: 5 },
+  troponin: { min: 0.0, max: 5.0, step: 0.01 },
+  bnp: { min: 5, max: 5000, step: 10 },
+  lactate: { min: 0.2, max: 20.0, step: 0.1 },
+  inr: { min: 0.5, max: 10.0, step: 0.1 },
+};
 
-const LungsIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <path d="M12 4v16M12 7c-2.5-3-7-3-9 0v7c2.2 3 6.8 3 9 0M12 7c2.5-3 7-3 9 0v7c-2.2 3-6.8 3-9 0" />
-    <path d="M5 14c1-1 2-1 3 0M16 14c1-1 2-1 3 0" />
-  </svg>
-);
+const debounce = (func, delay) => {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => func(...args), delay);
+  };
+};
 
-const MicrobeIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <circle cx="12" cy="12" r="9" />
-    <circle cx="8" cy="9" r="1.5" fill="currentColor" />
-    <circle cx="14" cy="8" r="1" fill="currentColor" />
-    <circle cx="15" cy="13" r="1.5" fill="currentColor" />
-    <circle cx="10" cy="15" r="1" fill="currentColor" />
-    <path d="M12 3a9 9 0 0 1 0 18" strokeDasharray="2 2" />
-  </svg>
-);
+const getSweepPoints = (param) => {
+  const range = CLINICAL_RANGES[param];
+  if (!range) return [];
+  const points = [];
+  const step = (range.max - range.min) / 9;
+  for (let i = 0; i < 10; i++) {
+    const val = range.min + step * i;
+    const rounded = range.step % 1 === 0
+      ? Math.round(val)
+      : parseFloat(val.toFixed(range.step.toString().split('.')[1]?.length || 1));
+    points.push(rounded);
+  }
+  return points;
+};
 
-const ShieldIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="M12 8v8M8 12h8" />
-  </svg>
-);
-
-const SirenIcon = () => (
-  <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="siren-icon">
-    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    <line x1="12" y1="9" x2="12" y2="13" />
-    <line x1="12" y1="17" x2="12.01" y2="17" />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22 4 12 14.01 9 11.01" />
-  </svg>
-);
-
-const SunIcon = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="5" />
-    <line x1="12" y1="1" x2="12" y2="3" />
-    <line x1="12" y1="21" x2="12" y2="23" />
-    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-    <line x1="1" y1="12" x2="3" y2="12" />
-    <line x1="21" y1="12" x2="23" y2="12" />
-    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-  </svg>
-);
-
-const MoonIcon = () => (
-  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-  </svg>
-);
-
-const HeartbeatRateIcon = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
-);
-
-const ChevronDownIcon = ({ expanded }) => (
-  <svg 
-    viewBox="0 0 24 24" 
-    width="20" 
-    height="20" 
-    stroke="currentColor" 
-    strokeWidth="2" 
-    fill="none" 
-    strokeLinecap="round" 
-    strokeLinejoin="round"
-    style={{ 
-      transition: 'transform 0.3s ease',
-      transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)'
-    }}
-  >
-    <polyline points="6 9 12 15 18 9"></polyline>
-  </svg>
-);
+const INITIAL_PATIENT_DATA = {
+  age: 45, sex: 'M', age_group: 'adult', altered_mentation: 0, chest_pain: 0, diabetes: 0,
+  spo2: 97, respiratory_rate: 16, temperature: 36.8, heart_rate: 70,
+  systolic_bp: 120, diastolic_bp: 80, pain_score: 2,
+  wbc: 7.5, hemoglobin: 14.0, platelet_count: 250, sodium: 140, potassium: 4.0,
+  creatinine: 0.9, glucose: 100, troponin: 0.01, bnp: 50, lactate: 1.2, inr: 1.0,
+};
 
 function App() {
-  const [patientName, setPatientName] = useState('');
-  const [patientData, setPatientData] = useState({
-    // Demographics
-    age: 45,
-    sex: 'M',
-    age_group: 'adult',
-    altered_mentation: 0,
-    chest_pain: 0,
-    diabetes: 0,
-    // Vitals
-    spo2: 97,
-    respiratory_rate: 16,
-    temperature: 36.8,
-    heart_rate: 70,
-    systolic_bp: 120,
-    diastolic_bp: 80,
-    pain_score: 2,
-    // Labs
-    wbc: 7.5,
-    hemoglobin: 14.0,
-    platelet_count: 250,
-    sodium: 140,
-    potassium: 4.0,
-    creatinine: 0.9,
-    glucose: 100,
-    troponin: 0.01,
-    bnp: 50,
-    lactate: 1.2,
-    inr: 1.0,
-  });
+  // ── Navigation ───────────────────────────────────────────────────────────
+  const [activePage, setActivePage] = useState('intake');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // ── Patient Identity ──────────────────────────────────────────────────────
+  const [patientName, setPatientName] = useState('');
+  const [currentPatientId, setCurrentPatientId] = useState(
+    () => 'PT-' + Math.random().toString(36).substring(2, 10).toUpperCase()
+  );
+
+  // ── Registry ─────────────────────────────────────────────────────────────
+  const [patientsList, setPatientsList] = useState([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [patientSearch, setPatientSearch] = useState('');
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState(null);
+  const [activePatientAssessments, setActivePatientAssessments] = useState([]);
+
+  // ── Patient Data ──────────────────────────────────────────────────────────
+  const [patientData, setPatientData] = useState(INITIAL_PATIENT_DATA);
+
+  // ── Results ───────────────────────────────────────────────────────────────
   const [predictions, setPredictions] = useState(null);
   const [aggregation, setAggregation] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [apiStatus, setApiStatus] = useState(false);
-  const [isLightMode, setIsLightMode] = useState(false);
-  const [feedbackStatus, setFeedbackStatus] = useState(null);
-  const [overrideValue, setOverrideValue] = useState('MEDIUM');
-  const [activeTab, setActiveTab] = useState('demographics'); // 'demographics' | 'vitals' | 'labs'
-  const [expandedAgent, setExpandedAgent] = useState(null);
   const [llmSummary, setLlmSummary] = useState(null);
   const [fullReport, setFullReport] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
+  const [overrideValue, setOverrideValue] = useState('MEDIUM');
+  const [expandedAgents, setExpandedAgents] = useState({});
+
+  // ── API & Theme ───────────────────────────────────────────────────────────
+  const [apiStatus, setApiStatus] = useState(false);
+  const [isLightMode, setIsLightMode] = useState(false);
+
+  // ── Simulator ─────────────────────────────────────────────────────────────
+  const [isWhatIfMode, setIsWhatIfMode] = useState(false);
+  const [baselineData, setBaselineData] = useState(null);
+  const [baselinePredictions, setBaselinePredictions] = useState(null);
+  const [sensitivityParam, setSensitivityParam] = useState('spo2');
+  const [sensitivityData, setSensitivityData] = useState([]);
+  const [insightsTab, setInsightsTab] = useState('subsystem');
+
   const reportRef = useRef(null);
 
+  // ── Theme effect ──────────────────────────────────────────────────────────
   useEffect(() => {
-    checkApiHealth();
-    const interval = setInterval(checkApiHealth, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    if (isLightMode) {
-      document.body.setAttribute('data-theme', 'light');
-    } else {
-      document.body.removeAttribute('data-theme');
-    }
+    if (isLightMode) document.body.setAttribute('data-theme', 'light');
+    else document.body.removeAttribute('data-theme');
   }, [isLightMode]);
 
-  // Auto-calculate pain score and age group based on clinical triage heuristics
-  const hr = patientData.heart_rate;
-  const sbp = patientData.systolic_bp;
-  const spo2 = patientData.spo2;
-  const temp = patientData.temperature;
-  const mentation = patientData.altered_mentation;
-  const age = patientData.age;
-
+  // ── Auto pain score + age group ───────────────────────────────────────────
+  const { heart_rate: hr, systolic_bp: sbp, spo2, temperature: temp, altered_mentation: mentation, age } = patientData;
   useEffect(() => {
     let score = 0;
-    if (mentation === 1) {
-      score = 0; // In comatose or severely altered patients, self-reported pain score is default 0 in triage
-    } else {
-      // Vital sign clinical stress index approximation for subjective pain
-      if (hr > 110) score += 3;
-      else if (hr > 90) score += 1;
-      
-      if (sbp > 160 || sbp < 90) score += 3;
-      else if (sbp > 140 || sbp < 100) score += 1;
-      
-      if (spo2 < 90) score += 3;
-      else if (spo2 < 93) score += 1;
-      
+    if (mentation !== 1) {
+      if (hr > 110) score += 3; else if (hr > 90) score += 1;
+      if (sbp > 160 || sbp < 90) score += 3; else if (sbp > 140 || sbp < 100) score += 1;
+      if (spo2 < 90) score += 3; else if (spo2 < 93) score += 1;
       if (temp > 38.5 || temp < 36.0) score += 1;
     }
-    
     let ageGrp = 'adult';
     if (age < 18) ageGrp = 'pediatric';
     else if (age < 65) ageGrp = 'adult';
     else if (age < 80) ageGrp = 'senior';
     else ageGrp = 'elderly';
-
     setPatientData(prev => {
       if (prev.pain_score === score && prev.age_group === ageGrp) return prev;
-      return {
-        ...prev,
-        pain_score: score,
-        age_group: ageGrp
-      };
+      return { ...prev, pain_score: score, age_group: ageGrp };
     });
   }, [age, hr, sbp, spo2, temp, mentation]);
 
+  // ── Init ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    checkApiHealth();
+    fetchPatients();
+    const interval = setInterval(checkApiHealth, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ── Debounced helpers ─────────────────────────────────────────────────────
+  const debouncedPredict = useCallback(
+    debounce(async (data) => {
+      try {
+        const response = await axios.post(`${API_URL}/unified/predict`, data);
+        if (response.data.status === 'success') {
+          setPredictions(response.data.predictions);
+          setAggregation(response.data.aggregation);
+        }
+      } catch (err) { console.error('Real-time predict error:', err); }
+    }, 250), []
+  );
+
+  const debouncedSweep = useCallback(
+    debounce(async (data, param) => { await runSensitivitySweep(data, param); }, 350), []
+  );
+
+  // ── Risk helper ───────────────────────────────────────────────────────────
+  const getRiskPercentage = (agg) => {
+    if (!agg) return 0;
+    const conf = agg.overall_confidence ?? 0.5;
+    if (agg.final_risk === 'HIGH') return 75 + conf * 25;
+    if (agg.final_risk === 'MEDIUM' || agg.final_risk === 'MID') return 35 + conf * 40;
+    return conf * 35;
+  };
+
+  // ── Sensitivity sweep ─────────────────────────────────────────────────────
+  const runSensitivitySweep = async (currentData, param) => {
+    const points = getSweepPoints(param);
+    if (!points.length) return;
+    const payload = points.map(val => ({ ...currentData, [param]: val }));
+    try {
+      const response = await axios.post(`${API_URL}/unified/batch`, payload);
+      if (response.data.status === 'success') {
+        setSensitivityData(response.data.results.map((res, idx) => ({
+          val: points[idx],
+          risk: parseFloat(getRiskPercentage(res.aggregation).toFixed(1)),
+        })));
+      }
+    } catch (err) { console.error('Sensitivity sweep error:', err); }
+  };
+
+  // ── API functions ─────────────────────────────────────────────────────────
   const checkApiHealth = async () => {
     try {
-      const response = await axios.get(`${API_URL}/health`);
-      setApiStatus(response.data.status === 'healthy');
-    } catch (err) {
-      setApiStatus(false);
-    }
+      const res = await axios.get(`${API_URL}/health`);
+      setApiStatus(res.data.status === 'healthy');
+    } catch { setApiStatus(false); }
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setPatientData(prev => ({
-      ...prev,
-      [name]: isNaN(value) ? value : parseFloat(value)
-    }));
+    const numericValue = isNaN(value) ? value : parseFloat(value);
+    setPatientData(prev => {
+      const updated = { ...prev, [name]: numericValue };
+      if (isWhatIfMode) {
+        debouncedPredict(updated);
+        if (CLINICAL_RANGES[name]) debouncedSweep(updated, name);
+      }
+      return updated;
+    });
   };
 
   const handlePredict = async () => {
     setLoading(true);
     setError(null);
+    setSelectedAssessmentId(null);
     try {
-      // Auto-generate a unique patient ID for this submission
-      const generatedId = 'PT-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-      const payload = {
-        ...patientData,
-        patient_id: generatedId,
-        patient_name: patientName.trim() || 'Anonymous',
-      };
+      const payload = { ...patientData, patient_id: currentPatientId, patient_name: patientName.trim() || 'Anonymous' };
       const response = await axios.post(`${API_URL}/hcai/analyze`, payload);
       if (response.data.status === 'success') {
         setPredictions(response.data.predictions);
@@ -238,6 +224,9 @@ function App() {
         setLlmSummary(response.data.hcai_report?.llm_interpretation || null);
         setFullReport(response.data.hcai_report || null);
         setFeedbackStatus(null);
+        fetchPatients();
+        // Auto-navigate to results
+        setActivePage('results');
       } else {
         setError(response.data.error || 'Prediction failed');
       }
@@ -248,662 +237,282 @@ function App() {
     }
   };
 
+  const fetchPatients = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/patients`);
+      if (res.data.status === 'success') setPatientsList(res.data.patients);
+    } catch (err) { console.error('Registry fetch error:', err); }
+  };
+
+  const handleSavePatient = async () => {
+    setSaveStatus('saving');
+    try {
+      await axios.post(`${API_URL}/api/patients`, {
+        ...patientData, patient_id: currentPatientId, patient_name: patientName.trim() || 'Anonymous',
+      });
+      setSaveStatus('saved');
+      fetchPatients();
+      setTimeout(() => setSaveStatus(null), 2500);
+    } catch { setSaveStatus('error'); setTimeout(() => setSaveStatus(null), 3000); }
+  };
+
+  const handleLoadPatient = async (pid) => {
+    try {
+      setRegistryLoading(true);
+      const res = await axios.get(`${API_URL}/api/patients/${pid}`);
+      if (res.data.status === 'success') {
+        const p = res.data.patient;
+        setCurrentPatientId(p.patient_id);
+        setPatientName(p.patient_name || '');
+        setPatientData({
+          age: p.age, sex: p.sex, age_group: p.age_group,
+          altered_mentation: p.altered_mentation, chest_pain: p.chest_pain, diabetes: p.diabetes,
+          spo2: p.spo2, respiratory_rate: p.respiratory_rate, temperature: p.temperature,
+          heart_rate: p.heart_rate, systolic_bp: p.systolic_bp, diastolic_bp: p.diastolic_bp,
+          pain_score: p.pain_score, wbc: p.wbc, hemoglobin: p.hemoglobin,
+          platelet_count: p.platelet_count, sodium: p.sodium, potassium: p.potassium,
+          creatinine: p.creatinine, glucose: p.glucose, troponin: p.troponin,
+          bnp: p.bnp, lactate: p.lactate, inr: p.inr,
+        });
+        if (p.assessments?.length > 0) {
+          setActivePatientAssessments(p.assessments);
+          const rd = p.assessments[0].report_data;
+          if (rd?.predictions) {
+            setPredictions(rd.predictions);
+            setAggregation(rd.aggregation);
+            setLlmSummary(rd.report?.llm_interpretation || null);
+            setFullReport(rd.report || null);
+            setFeedbackStatus(null);
+            setSelectedAssessmentId(p.assessments[0].assessment_id);
+          }
+        } else {
+          setActivePatientAssessments([]);
+          setPredictions(null); setAggregation(null); setLlmSummary(null);
+          setFullReport(null); setSelectedAssessmentId(null);
+        }
+        setActivePage('intake');
+      }
+    } catch (err) { console.error('Error loading patient:', err); }
+    finally { setRegistryLoading(false); }
+  };
+
+  const handleLoadAssessment = (assessment) => {
+    const rd = assessment.report_data;
+    if (rd?.predictions) {
+      setPredictions(rd.predictions);
+      setAggregation(rd.aggregation);
+      setLlmSummary(rd.report?.llm_interpretation || null);
+      setFullReport(rd.report || null);
+      setSelectedAssessmentId(assessment.assessment_id);
+      setFeedbackStatus(null);
+    }
+  };
+
+  const handleDeletePatient = async (pid, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Delete this patient and all their assessment history?')) return;
+    try {
+      await axios.delete(`${API_URL}/api/patients/${pid}`);
+      fetchPatients();
+      if (pid === currentPatientId) handleNewPatient();
+    } catch (err) { console.error('Error deleting patient:', err); }
+  };
+
+  const handleNewPatient = () => {
+    setCurrentPatientId('PT-' + Math.random().toString(36).substring(2, 10).toUpperCase());
+    setPatientName('');
+    setActivePatientAssessments([]);
+    setPatientData(INITIAL_PATIENT_DATA);
+    setPredictions(null); setAggregation(null); setLlmSummary(null);
+    setFullReport(null); setFeedbackStatus(null); setSelectedAssessmentId(null);
+    setIsWhatIfMode(false); setBaselineData(null); setBaselinePredictions(null); setSensitivityData([]);
+    setActivePage('intake');
+  };
+
   const handleFeedback = async (action) => {
     try {
       setFeedbackStatus('submitting');
-      const payload = {
+      await axios.post(`${API_URL}/feedback`, {
         patient_data: patientData,
         ai_final_risk: aggregation?.final_risk,
         clinician_override: action === 'override' ? overrideValue : aggregation?.final_risk,
-        action: action
-      };
-      await axios.post(`${API_URL}/feedback`, payload);
+        action,
+      });
       setFeedbackStatus('success');
-    } catch (err) {
-      setFeedbackStatus('error');
-    }
+    } catch { setFeedbackStatus('error'); }
   };
 
   const loadHealthyExample = () => {
     setPatientData({
       age: 35, sex: 'M', age_group: 'adult', altered_mentation: 0, chest_pain: 0, diabetes: 0,
       spo2: 98, respiratory_rate: 14, temperature: 36.6, heart_rate: 65, systolic_bp: 115, diastolic_bp: 75, pain_score: 0,
-      wbc: 6.0, hemoglobin: 15.0, platelet_count: 280, sodium: 140, potassium: 4.2, creatinine: 0.8, glucose: 90, troponin: 0.00, bnp: 20, lactate: 1.0, inr: 1.0
+      wbc: 6.0, hemoglobin: 15.0, platelet_count: 280, sodium: 140, potassium: 4.2,
+      creatinine: 0.8, glucose: 90, troponin: 0.00, bnp: 20, lactate: 1.0, inr: 1.0,
     });
-    setPredictions(null);
-    setAggregation(null);
-    setLlmSummary(null);
-    setFeedbackStatus(null);
+    setPredictions(null); setAggregation(null); setLlmSummary(null);
+    setFeedbackStatus(null); setIsWhatIfMode(false); setBaselineData(null);
+    setBaselinePredictions(null); setSensitivityData([]);
   };
 
   const loadHighRiskExample = () => {
     setPatientData({
       age: 72, sex: 'F', age_group: 'senior', altered_mentation: 1, chest_pain: 1, diabetes: 1,
       spo2: 88, respiratory_rate: 30, temperature: 39.5, heart_rate: 120, systolic_bp: 85, diastolic_bp: 50, pain_score: 8,
-      wbc: 18.0, hemoglobin: 10.0, platelet_count: 90, sodium: 130, potassium: 5.5, creatinine: 2.5, glucose: 250, troponin: 0.8, bnp: 800, lactate: 4.5, inr: 2.1
+      wbc: 18.0, hemoglobin: 10.0, platelet_count: 90, sodium: 130, potassium: 5.5,
+      creatinine: 2.5, glucose: 250, troponin: 0.8, bnp: 800, lactate: 4.5, inr: 2.1,
     });
-    setPredictions(null);
-    setAggregation(null);
-    setLlmSummary(null);
-    setFeedbackStatus(null);
+    setPredictions(null); setAggregation(null); setLlmSummary(null);
+    setFeedbackStatus(null); setIsWhatIfMode(false); setBaselineData(null);
+    setBaselinePredictions(null); setSensitivityData([]);
   };
 
   const downloadReport = async () => {
     if (!fullReport || !reportRef.current) return;
-    
-    const originalStyles = {
-        position: reportRef.current.style.position,
-        left: reportRef.current.style.left,
-        top: reportRef.current.style.top,
-        zIndex: reportRef.current.style.zIndex,
-        visibility: reportRef.current.style.visibility
-    };
-
+    const el = reportRef.current;
+    const origStyles = { position: el.style.position, left: el.style.left, top: el.style.top, zIndex: el.style.zIndex, visibility: el.style.visibility };
     try {
-        setFeedbackStatus('submitting'); // Reuse submitting state for loading UI if desired
-        reportRef.current.style.position = 'absolute';
-        reportRef.current.style.left = '0';
-        reportRef.current.style.top = '0';
-        reportRef.current.style.zIndex = '-9999';
-        reportRef.current.style.visibility = 'visible';
+      setFeedbackStatus('submitting');
+      Object.assign(el.style, { position: 'absolute', left: '0', top: '0', zIndex: '-9999', visibility: 'visible' });
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      const pdf = new jsPDF('p', 'pt', 'a4');
+      const pw = pdf.internal.pageSize.getWidth();
+      pdf.addImage(canvas.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, pw, (canvas.height * pw) / canvas.width);
+      pdf.save(`${fullReport.report_id || 'triage_report'}.pdf`);
+    } catch (err) { console.error('PDF error:', err); }
+    finally { Object.assign(el.style, origStyles); setFeedbackStatus(null); }
+  };
 
-        const canvas = await html2canvas(reportRef.current, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            backgroundColor: '#ffffff'
-        });
-
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
-        
-        const pdf = new jsPDF('p', 'pt', 'a4');
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-        
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-        pdf.save(`${fullReport.report_id || 'triage_report'}.pdf`);
-
-    } catch (error) {
-        console.error("Error generating PDF:", error);
-    } finally {
-        Object.assign(reportRef.current.style, originalStyles);
-        setFeedbackStatus(null);
+  // ── Page renderer ─────────────────────────────────────────────────────────
+  const renderPage = () => {
+    switch (activePage) {
+      case 'intake':
+        return (
+          <IntakePage
+            patientData={patientData}
+            handleInputChange={handleInputChange}
+            loading={loading}
+            error={error}
+            apiStatus={apiStatus}
+            handlePredict={handlePredict}
+            loadHealthyExample={loadHealthyExample}
+            loadHighRiskExample={loadHighRiskExample}
+          />
+        );
+      case 'results':
+        return (
+          <ResultsPage
+            predictions={predictions}
+            aggregation={aggregation}
+            llmSummary={llmSummary}
+            fullReport={fullReport}
+            patientData={patientData}
+            feedbackStatus={feedbackStatus}
+            setFeedbackStatus={setFeedbackStatus}
+            overrideValue={overrideValue}
+            setOverrideValue={setOverrideValue}
+            handleFeedback={handleFeedback}
+            downloadReport={downloadReport}
+            reportRef={reportRef}
+            expandedAgents={expandedAgents}
+            setExpandedAgents={setExpandedAgents}
+            activePatientAssessments={activePatientAssessments}
+            selectedAssessmentId={selectedAssessmentId}
+            handleLoadAssessment={handleLoadAssessment}
+          />
+        );
+      case 'simulator':
+        return (
+          <SimulatorPage
+            predictions={predictions}
+            patientData={patientData}
+            setPatientData={setPatientData}
+            baselineData={baselineData}
+            setBaselineData={setBaselineData}
+            baselinePredictions={baselinePredictions}
+            setBaselinePredictions={setBaselinePredictions}
+            isWhatIfMode={isWhatIfMode}
+            setIsWhatIfMode={setIsWhatIfMode}
+            sensitivityData={sensitivityData}
+            setSensitivityData={setSensitivityData}
+            sensitivityParam={sensitivityParam}
+            setSensitivityParam={setSensitivityParam}
+            insightsTab={insightsTab}
+            setInsightsTab={setInsightsTab}
+            debouncedPredict={debouncedPredict}
+            debouncedSweep={debouncedSweep}
+            runSensitivitySweep={runSensitivitySweep}
+            loading={loading}
+            setLoading={setLoading}
+            setError={setError}
+            patientName={patientName}
+            currentPatientId={currentPatientId}
+            API_URL={API_URL}
+            axios={axios}
+            setPredictions={setPredictions}
+            setAggregation={setAggregation}
+            setLlmSummary={setLlmSummary}
+            setFullReport={setFullReport}
+            setFeedbackStatus={setFeedbackStatus}
+          />
+        );
+      case 'registry':
+        return (
+          <RegistryPage
+            patientsList={patientsList}
+            patientSearch={patientSearch}
+            setPatientSearch={setPatientSearch}
+            registryLoading={registryLoading}
+            currentPatientId={currentPatientId}
+            handleLoadPatient={handleLoadPatient}
+            handleDeletePatient={handleDeletePatient}
+            handleNewPatient={handleNewPatient}
+            fetchPatients={fetchPatients}
+            activePatientAssessments={activePatientAssessments}
+            selectedAssessmentId={selectedAssessmentId}
+            handleLoadAssessment={handleLoadAssessment}
+          />
+        );
+      case 'settings':
+        return <SettingsPage isLightMode={isLightMode} setIsLightMode={setIsLightMode} apiStatus={apiStatus} />;
+      default:
+        return null;
     }
-  };
-
-  const getRiskColor = (riskLevel) => {
-    if (!riskLevel) return '#94a3b8';
-    if (riskLevel.includes('LOW')) return '#10b981'; // Emerald
-    if (riskLevel.includes('MEDIUM') || riskLevel.includes('MID')) return '#f59e0b'; // Amber
-    if (riskLevel.includes('HIGH')) return '#ef4444'; // Red
-    return '#94a3b8';
-  };
-
-  const processVitalsForRadar = () => {
-    const safeCalc = (val, normal, critical) => {
-      let percent = 50 + ((val - normal) / (critical - normal)) * 50;
-      return Math.max(0, Math.min(100, percent));
-    };
-    
-    return [
-      { subject: 'Heart Rate', A: safeCalc(patientData.heart_rate, 75, 120), fullMark: 100, original: `${patientData.heart_rate} bpm` },
-      { subject: 'Resp Rate', A: safeCalc(patientData.respiratory_rate, 16, 30), fullMark: 100, original: `${patientData.respiratory_rate} /min` },
-      { subject: 'SpO2 (Inv)', A: safeCalc(100 - patientData.spo2, 2, 10), fullMark: 100, original: `${patientData.spo2} %` },
-      { subject: 'Temp', A: safeCalc(patientData.temperature, 37.0, 39.5), fullMark: 100, original: `${patientData.temperature} °C` },
-      { subject: 'Systolic BP', A: safeCalc(patientData.systolic_bp, 120, 180), fullMark: 100, original: `${patientData.systolic_bp} mmHg` },
-    ];
-  };
-
-  const CustomRadarTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="radar-tooltip">
-          <p className="tooltip-label">{data.subject}</p>
-          <p className="tooltip-value">Clinical Value: <strong>{data.original}</strong></p>
-          <p className="tooltip-normalized">Aggregated Risk Index: {Math.round(data.A)}/100</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const renderInput = (label, name, value, type = 'number', unit = '', range = '', options = null, disabled = false) => {
-    return (
-      <div className="input-group">
-        <div className="input-header">
-          <label>{label}</label>
-          {range && <span className="input-range">{range}</span>}
-        </div>
-        <div className="input-control-wrapper">
-          {options ? (
-            <select name={name} value={value} onChange={handleInputChange} disabled={disabled}>
-              {options.map(opt => <option key={opt.val} value={opt.val}>{opt.lbl}</option>)}
-            </select>
-          ) : (
-            <>
-              <input 
-                type={type} 
-                name={name} 
-                value={value} 
-                onChange={handleInputChange} 
-                disabled={disabled}
-                step={name === 'temperature' ? '0.1' : ['wbc', 'hemoglobin', 'potassium', 'creatinine', 'lactate', 'inr'].includes(name) ? '0.1' : name === 'troponin' ? '0.01' : '1'} 
-              />
-              {unit && <span className="input-unit">{unit}</span>}
-            </>
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const renderCard = (title, modelKey, data) => {
-    if (!data) return null;
-    if (data.status === 'error') {
-      return (
-        <div className="prediction-card error-card">
-          <div className="card-header">
-            <h3>{title}</h3>
-            <span className="error-icon">⚠️</span>
-          </div>
-          <p className="error-desc">Assessment Failed: {data.error_message}</p>
-        </div>
-      );
-    }
-    const color = getRiskColor(data.risk_level);
-    
-    // Normalize probability keys: handles both 'low/medium/high' and 'low_risk/mid_risk/high_risk'
-    const probs = data.probabilities ? {
-      low: data.probabilities.low ?? data.probabilities.low_risk ?? 0,
-      medium: data.probabilities.medium ?? data.probabilities.mid_risk ?? 0,
-      high: data.probabilities.high ?? data.probabilities.high_risk ?? 0
-    } : null;
-    
-    // Choose appropriate SVG Icon
-    let AgentIcon = ShieldIcon;
-    if (modelKey === 'respiratory') AgentIcon = LungsIcon;
-    else if (modelKey === 'cardiac') AgentIcon = HeartPulseIcon;
-    else if (modelKey === 'sepsis') AgentIcon = MicrobeIcon;
-
-    const isExpanded = expandedAgent === modelKey;
-
-    return (
-      <div className={`prediction-card ${isExpanded ? 'expanded' : 'collapsed'}`} style={{ '--card-color': color }}>
-        <div 
-          className="card-header clickable-header" 
-          onClick={() => setExpandedAgent(isExpanded ? null : modelKey)}
-        >
-          <div className="card-title-group">
-            <span className="card-icon-container" style={{ color: color }}>
-              <AgentIcon />
-            </span>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <h3 style={{ margin: 0 }}>{title}</h3>
-              {!isExpanded && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Click to view analysis</span>}
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div className="risk-badge" style={{ borderColor: color, color: color, backgroundColor: color + '15', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {data.risk_level.replace('_RISK', '')}
-              {/* Optional: Show confidence dot/percent in collapsed mode */}
-              <span style={{ fontSize: '0.7rem', opacity: 0.8, paddingLeft: '4px', borderLeft: `1px solid ${color}40` }}>
-                {(data.confidence * 100).toFixed(0)}%
-              </span>
-            </div>
-            <div className="expand-toggle" style={{ color: 'var(--text-muted)' }}>
-              <ChevronDownIcon expanded={isExpanded} />
-            </div>
-          </div>
-        </div>
-        
-        {isExpanded && (
-          <div className="card-body animate-slide-down">
-            {/* Custom Aesthetic Confidence Gauge */}
-            <div className="confidence-meter-container">
-              <div className="confidence-header">
-                <span>Agent Confidence</span>
-                <span className="confidence-value" style={{ color: color }}>{(data.confidence * 100).toFixed(1)}%</span>
-              </div>
-              <div className="confidence-bar-wrapper">
-                <div className="confidence-bar-fill" style={{ width: `${data.confidence * 100}%`, backgroundColor: color }}>
-                  <span className="confidence-pulse-dot" style={{ backgroundColor: color }}></span>
-                </div>
-              </div>
-            </div>
-
-            <div className="action-text">
-              <span className="action-label">Recommendation:</span>
-              <p>{data.clinical_action}</p>
-            </div>
-
-            <div className="probabilities-section">
-              <span className="section-small-title">Risk Distribution</span>
-              <div className="probabilities-bar">
-                {probs && (
-                  <>
-                    <div className="prob-segment" style={{ width: `${probs.low * 100}%`, backgroundColor: '#10b981' }}></div>
-                    <div className="prob-segment" style={{ width: `${probs.medium * 100}%`, backgroundColor: '#f59e0b' }}></div>
-                    <div className="prob-segment" style={{ width: `${probs.high * 100}%`, backgroundColor: '#ef4444' }}></div>
-                  </>
-                )}
-              </div>
-              <div className="probabilities-labels">
-                <span>L: {((probs?.low || 0)*100).toFixed(0)}%</span>
-                <span>M: {((probs?.medium || 0)*100).toFixed(0)}%</span>
-                <span>H: {((probs?.high || 0)*100).toFixed(0)}%</span>
-              </div>
-            </div>
-
-            <div className="shap-section">
-              <h4 className="shap-title">Key Clinical Drivers</h4>
-              {data.top_contributing_features && data.top_contributing_features.length > 0 ? (
-                <div className="shap-bars">
-                  {data.top_contributing_features.map((feat, idx) => {
-                    const maxVal = Math.max(...data.top_contributing_features.map(f => Math.abs(f.value)), 0.001);
-                    const percentage = Math.min(100, Math.max(10, (Math.abs(feat.value) / maxVal) * 100));
-                    const isPositive = feat.impact === 'positive';
-                    
-                    return (
-                      <div key={idx} className="shap-row-modern">
-                        <div className="shap-label-row">
-                          <span className="shap-feat-name">{feat.feature.replace(/_/g, ' ')}</span>
-                          <span className={`shap-feat-impact-tag ${isPositive ? 'positive' : 'negative'}`}>
-                            {isPositive ? '↑' : '↓'} {Math.abs(feat.value).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="shap-track-modern">
-                          <div 
-                            className={`shap-fill-modern ${isPositive ? 'risk-up' : 'risk-down'}`} 
-                            style={{ width: `${percentage}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="shap-empty">Baseline values detected</div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
-    <div className="app">
+    <div className="app-shell">
       <div className="glow-bg"></div>
-      
-      <header className="header">
-        <div className="header-content">
-          <div className="header-top-row">
-            <div className="logo-section">
-              <div className="pulse-circle">
-                <HeartbeatRateIcon />
-              </div>
-              <div>
-                <h1>OmniHealth Diagnostics</h1>
-                <p className="subtitle">Clinical Multi-Agent Decision Engine</p>
-              </div>
-            </div>
-            
-            <div className="header-controls">
-              <div className={`api-status ${apiStatus ? 'connected' : 'disconnected'}`}>
-                <span className="status-dot"></span>
-                <span>{apiStatus ? 'Core Engine Active' : 'Core Engine Offline'}</span>
-              </div>
-              
-              <button className="theme-toggle" onClick={() => setIsLightMode(!isLightMode)} title="Toggle Visual Style">
-                {isLightMode ? <MoonIcon /> : <SunIcon />}
-                <span>{isLightMode ? 'Dark Terminal' : 'Clinical Light'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
 
-      <main className="main-container">
-        
-        {/* Left Column: Form Intake Panel */}
-        <section className="input-section glass-panel">
-          <div className="section-header">
-            <div className="section-title-group">
-              <h2>Patient Parameters</h2>
-              <span className="badge-clinical">Triage Intake</span>
-            </div>
-            
-            <div className="presets-group">
-              <button className="btn outline preset-btn" onClick={loadHealthyExample}>
-                <span>Healthy Preset</span>
-              </button>
-              <button className="btn outline preset-btn critical" onClick={loadHighRiskExample}>
-                <span>Critical Preset</span>
-              </button>
-            </div>
-          </div>
+      <Sidebar
+        activePage={activePage}
+        setActivePage={setActivePage}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
+        patientsList={patientsList}
+        hasResults={!!predictions}
+      />
 
-          {/* Form Tabs Nav */}
-          <div className="tab-navigation">
-            <button 
-              className={`tab-btn ${activeTab === 'demographics' ? 'active' : ''}`}
-              onClick={() => setActiveTab('demographics')}
-              type="button"
-            >
-              <span>Demographics</span>
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'vitals' ? 'active' : ''}`}
-              onClick={() => setActiveTab('vitals')}
-              type="button"
-            >
-              <span>Vitals & SpO₂</span>
-            </button>
-            <button 
-              className={`tab-btn ${activeTab === 'labs' ? 'active' : ''}`}
-              onClick={() => setActiveTab('labs')}
-              type="button"
-            >
-              <span>Lab Reports</span>
-            </button>
-          </div>
+      <div className="app-main">
+        <TopBar
+          activePage={activePage}
+          patientName={patientName}
+          setPatientName={setPatientName}
+          currentPatientId={currentPatientId}
+          apiStatus={apiStatus}
+          isLightMode={isLightMode}
+          setIsLightMode={setIsLightMode}
+          saveStatus={saveStatus}
+          onSave={handleSavePatient}
+          onNewPatient={handleNewPatient}
+          loading={loading}
+        />
 
-          {/* Patient Name – top-level field always visible */}
-          <div className="patient-name-field" style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px', opacity: 0.7 }}>Patient Name</label>
-            <input
-              id="patient-name-input"
-              type="text"
-              value={patientName}
-              onChange={e => setPatientName(e.target.value)}
-              placeholder="e.g. Jane Doe (optional)"
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '8px',
-                border: '1px solid rgba(255,255,255,0.15)',
-                background: 'rgba(255,255,255,0.05)',
-                color: 'inherit',
-                fontSize: '1rem',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
-            <p style={{ fontSize: '0.75rem', opacity: 0.5, margin: '4px 0 0 2px' }}>A unique Patient ID will be auto-generated on submission.</p>
-          </div>
+        <main className="page-content">
+          {renderPage()}
+        </main>
+      </div>
 
-          <div className="form-sections-wrapper">
-            {/* Demographics Tab Content */}
-            {activeTab === 'demographics' && (
-              <div className="form-tab-panel animate-fade-in">
-                <div className="form-grid">
-                  {renderInput('Age', 'age', patientData.age, 'number', 'yrs', 'Range: 0-120')}
-                  {renderInput('Sex', 'sex', patientData.sex, 'text', '', '', [
-                    { val: 'M', lbl: 'Male' },
-                    { val: 'F', lbl: 'Female' }
-                  ])}
-                  {renderInput('Altered Mentation', 'altered_mentation', patientData.altered_mentation, 'number', '', '', [
-                    { val: 0, lbl: 'Alert / Alerted' },
-                    { val: 1, lbl: 'Confused / Altered' }
-                  ])}
-                  {renderInput('Pain Score (Auto)', 'pain_score', patientData.pain_score, 'number', '/10', 'Auto from vitals', null, true)}
-                  {renderInput('Chest Pain', 'chest_pain', patientData.chest_pain, 'number', '', '', [
-                    { val: 0, lbl: 'No / Absent' },
-                    { val: 1, lbl: 'Yes / Present' }
-                  ])}
-                  {renderInput('Diabetes History', 'diabetes', patientData.diabetes, 'number', '', '', [
-                    { val: 0, lbl: 'No History' },
-                    { val: 1, lbl: 'Diabetic' }
-                  ])}
-                </div>
-              </div>
-            )}
-
-            {/* Vitals Tab Content */}
-            {activeTab === 'vitals' && (
-              <div className="form-tab-panel animate-fade-in">
-                <div className="form-grid">
-                  {renderInput('SpO₂', 'spo2', patientData.spo2, 'number', '%', 'Target: 95-100%')}
-                  {renderInput('Resp Rate', 'respiratory_rate', patientData.respiratory_rate, 'number', '/min', 'Normal: 12-20')}
-                  {renderInput('Temperature', 'temperature', patientData.temperature, 'number', '°C', 'Normal: 36.5-37.5')}
-                  {renderInput('Heart Rate', 'heart_rate', patientData.heart_rate, 'number', 'bpm', 'Normal: 60-100')}
-                  {renderInput('Systolic BP', 'systolic_bp', patientData.systolic_bp, 'number', 'mmHg', 'Normal: 90-120')}
-                  {renderInput('Diastolic BP', 'diastolic_bp', patientData.diastolic_bp, 'number', 'mmHg', 'Normal: 60-80')}
-                </div>
-              </div>
-            )}
-
-            {/* Labs Tab Content */}
-            {activeTab === 'labs' && (
-              <div className="form-tab-panel animate-fade-in">
-                <div className="form-grid-labs">
-                  {renderInput('WBC Count', 'wbc', patientData.wbc, 'number', 'k/µL', 'Normal: 4.5-11.0')}
-                  {renderInput('Hemoglobin', 'hemoglobin', patientData.hemoglobin, 'number', 'g/dL', 'Normal: 12.0-17.5')}
-                  {renderInput('Platelets', 'platelet_count', patientData.platelet_count, 'number', 'k/µL', 'Normal: 150-450')}
-                  {renderInput('Serum Sodium', 'sodium', patientData.sodium, 'number', 'mEq/L', 'Normal: 135-145')}
-                  {renderInput('Potassium', 'potassium', patientData.potassium, 'number', 'mEq/L', 'Normal: 3.5-5.0')}
-                  {renderInput('Creatinine', 'creatinine', patientData.creatinine, 'number', 'mg/dL', 'Normal: 0.6-1.2')}
-                  {renderInput('Glucose', 'glucose', patientData.glucose, 'number', 'mg/dL', 'Normal: 70-140')}
-                  {renderInput('Troponin', 'troponin', patientData.troponin, 'number', 'ng/mL', 'Normal: < 0.04')}
-                  {renderInput('BNP', 'bnp', patientData.bnp, 'number', 'pg/mL', 'Normal: < 100')}
-                  {renderInput('Lactate', 'lactate', patientData.lactate, 'number', 'mmol/L', 'Normal: 0.5-2.2')}
-                  {renderInput('INR', 'inr', patientData.inr, 'number', '', 'Normal: 0.8-1.2')}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <button 
-            className="btn primary full-width predict-btn" 
-            onClick={handlePredict} 
-            disabled={loading || !apiStatus}
-          >
-            {loading ? (
-              <span className="spinner-group">
-                <span className="spinner"></span>
-                <span>Calculating Telemetry...</span>
-              </span>
-            ) : 'Analyze Clinical Risk'}
-          </button>
-          
-          {error && <div className="error-msg">⚠️ {error}</div>}
-        </section>
- 
-        {/* Right Column: Dynamic Results Grid */}
-        <section className="results-section">
-          {!predictions && !loading && (
-            <div className="empty-state glass-panel">
-              <div className="radar-sonar-container">
-                <div className="sonar-wave"></div>
-                <div className="sonar-center">🩺</div>
-              </div>
-              <h2>Ready for Diagnostic Assessment</h2>
-              <p>Verify patient telemetry inputs above and trigger the multi-agent neural analytics system to compute clinical risks.</p>
-            </div>
-          )}
-
-          {predictions && (
-            <>
-              {aggregation && (
-                <div className="final-risk-banner glass-panel" style={{ '--card-color': getRiskColor(aggregation.final_risk) }}>
-                  <div className="banner-alert-line">
-                    <div className="banner-title-group">
-                      <span className="siren-wrapper" style={{ color: getRiskColor(aggregation.final_risk) }}>
-                        {aggregation.final_risk.includes('HIGH') ? <SirenIcon /> : <CheckIcon />}
-                      </span>
-                      <h2>Triage Alert: Risk Certified {aggregation.final_risk}</h2>
-                    </div>
-                    
-                    <div className="risk-pill-badge" style={{ backgroundColor: getRiskColor(aggregation.final_risk) + '20', color: getRiskColor(aggregation.final_risk), borderColor: getRiskColor(aggregation.final_risk) }}>
-                      {aggregation.final_risk} RISK
-                    </div>
-                  </div>
-                  
-                  <p className="explanation-paragraph">
-                    {aggregation.explanation}
-                  </p>
-                  
-                  {llmSummary && (
-                    <div className="llm-summary-box" style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'rgba(0, 0, 0, 0.1)', borderRadius: '8px', borderLeft: `4px solid ${getRiskColor(aggregation.final_risk)}` }}>
-                      <div style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '0.5rem', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>✨ AI Clinical Summary</span>
-                      </div>
-                      <p style={{ margin: 0, lineHeight: 1.5 }}>
-                        {llmSummary}
-                      </p>
-                    </div>
-                  )}
-
-                  {aggregation.safety_alerts && aggregation.safety_alerts.length > 0 && (
-                    <div className="safety-alerts-box">
-                      <div className="safety-alerts-title">🚨 ACTIVE CRITICAL CLINICAL ALERTS:</div>
-                      {aggregation.safety_alerts.map((alert, i) => (
-                        <div key={i} className="safety-alert-item">
-                          <span>{alert}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  
-                  <div className="banner-footer">
-                    <span>Aggregated Neural Fusion Confidence: <strong>{(aggregation.overall_confidence * 100).toFixed(1)}%</strong></span>
-                  </div>
-                </div>
-              )}
-
-              <div className="telemetry-dashboard-row">
-                <div className="radar-container glass-panel">
-                  <div className="radar-header">
-                    <h3>Normalized Vitals Radar</h3>
-                    <p className="chart-subtitle">Deviation from standard normal indices</p>
-                  </div>
-                  
-                  <div className="radar-wrapper">
-                    <RadarChart cx="50%" cy="50%" outerRadius="75%" width={500} height={350} data={processVitalsForRadar()}>
-                      <defs>
-                        <radialGradient id="radarGradient" cx="50%" cy="50%" r="80%">
-                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.1} />
-                          <stop offset="100%" stopColor="#2563eb" stopOpacity={0.4} />
-                        </radialGradient>
-                      </defs>
-                      <PolarGrid stroke={isLightMode ? "#cbd5e1" : "rgba(255,255,255,0.12)"} gridType="circle" />
-                      <PolarAngleAxis dataKey="subject" tick={{ fill: isLightMode ? "#475569" : "#94a3b8", fontSize: 12, fontWeight: 500 }} />
-                      <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                      <Radar name="Vitals Deviation" dataKey="A" stroke="#2563eb" strokeWidth={2} fill="url(#radarGradient)" fillOpacity={0.6} dot={{ r: 4, fill: '#2563eb', stroke: '#fff', strokeWidth: 1.5 }} />
-                      <Tooltip content={<CustomRadarTooltip />} />
-                    </RadarChart>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="dashboard-grid">
-                {renderCard('Respiratory Sub-Agent', 'respiratory', predictions.respiratory)}
-                {renderCard('Cardiac Sub-Agent', 'cardiac', predictions.cardiac)}
-                {renderCard('Sepsis Sub-Agent', 'sepsis', predictions.sepsis)}
-                {renderCard('General Health Sub-Agent', 'general', predictions.general)}
-              </div>
-              
-              {aggregation && (
-                <div className="clinician-feedback-card glass-panel">
-                  <div className="feedback-badge-header">
-                    <div className="feedback-title-group">
-                      <span className="feedback-icon">🔒</span>
-                      <h3>Diagnostic Attestation & Sign-off</h3>
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                      {fullReport && (
-                        <button 
-                          className="btn-download" 
-                          onClick={downloadReport}
-                          style={{
-                            backgroundColor: 'transparent',
-                            border: '1px solid currentColor',
-                            color: 'inherit',
-                            padding: '4px 12px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px'
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                            <polyline points="7 10 12 15 17 10"></polyline>
-                            <line x1="12" y1="15" x2="12" y2="3"></line>
-                          </svg>
-                          Download PDF
-                        </button>
-                      )}
-                      <span className="status-badge-pending">Pending Review</span>
-                    </div>
-                  </div>
-                  <p className="feedback-description">
-                    Please review the multi-agent diagnostic outputs. You can choose to certify the AI's triage risk assessment or log an override classification to support continuous learning.
-                  </p>
-                  
-                  {feedbackStatus === 'success' ? (
-                    <div className="feedback-success-state">
-                      <div className="success-checkmark-circle">
-                        <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" strokeWidth="3" fill="none">
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h4>Assessment Certified & Transmitted</h4>
-                        <p>Your feedback has been successfully appended to the clinical audit log for retraining.</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="feedback-actions-row">
-                      <button 
-                        className="btn-certify"
-                        onClick={() => handleFeedback('accept')}
-                        disabled={feedbackStatus === 'submitting'}
-                      >
-                        <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        Certify AI Prediction
-                      </button>
-                      
-                      <div className="feedback-divider">
-                        <span>OR</span>
-                      </div>
-                      
-                      <div className="override-control-group">
-                        <select 
-                          value={overrideValue} 
-                          onChange={(e) => setOverrideValue(e.target.value)}
-                          className="override-select"
-                        >
-                          <option value="LOW">Low Risk</option>
-                          <option value="MEDIUM">Medium Risk</option>
-                          <option value="HIGH">High Risk</option>
-                        </select>
-                        <button 
-                          className="btn-override"
-                          onClick={() => handleFeedback('override')}
-                          disabled={feedbackStatus === 'submitting'}
-                        >
-                          <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{marginRight: '8px'}}>
-                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                          </svg>
-                          Submit Override
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </>
-          )}
-        </section>
-
-      </main>
-
+      {/* Hidden PDF template */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden', overflow: 'hidden' }}>
         <PdfReportTemplate ref={reportRef} fullReport={fullReport} patientData={patientData} />
       </div>

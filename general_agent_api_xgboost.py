@@ -74,7 +74,7 @@ class GeneralHealthAgent:
         'inr': (0.5, 5),
     }
     
-    def __init__(self, model_path: str = 'general_xgb_model.joblib'):
+    def __init__(self, model_path: str = 'models/general_xgb_model.joblib'):
         """
         Initialize the general health agent.
         

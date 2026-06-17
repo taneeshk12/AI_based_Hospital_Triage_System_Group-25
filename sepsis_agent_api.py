@@ -34,7 +34,7 @@ class SepsisAgent:
         'LOW': 0.0
     }
     
-    def __init__(self, model_path: str = 'sepsis_xgb_model.pkl'):
+    def __init__(self, model_path: str = 'models/sepsis_xgb_model.pkl'):
         self.model = None
         self.model_loaded = False
         

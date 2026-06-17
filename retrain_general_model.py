@@ -13,7 +13,7 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.preprocessing import LabelEncoder
 
 print("Loading data...")
-df = pd.read_csv('data_engineered.csv')
+df = pd.read_csv('data/data_engineered.csv')
 print(f"  Shape: {df.shape}")
 
 # ── Map ESI → 3 risk classes ────────────────────────────────
@@ -84,8 +84,8 @@ top5_idx = np.argsort(importances)[-5:][::-1]
 print("Top 5 features:", [FEATURES[i] for i in top5_idx])
 
 # ── Save model ───────────────────────────────────────────────
-joblib.dump(model, 'general_xgb_model.joblib')
-print("\n✓ Saved: general_xgb_model.joblib")
+joblib.dump(model, 'models/general_xgb_model.joblib')
+print("\n✓ Saved: models/general_xgb_model.joblib")
 
 # ── Save metadata ─────────────────────────────────────────────
 meta = {
@@ -102,7 +102,7 @@ meta = {
     'training_samples': len(X_train),
     'test_samples': len(X_test),
 }
-with open('general_xgb_meta.json', 'w') as f:
+with open('models/general_xgb_meta.json', 'w') as f:
     json.dump(meta, f, indent=2)
-print("✓ Saved: general_xgb_meta.json")
+print("✓ Saved: models/general_xgb_meta.json")
 print("\n✅ Done! Restart the Flask server to load the new model.")

@@ -51,8 +51,8 @@ class RespiratoryAgent:
     UNCERTAINTY_THRESHOLD_HIGH = 0.02
     
     def __init__(self, 
-                 pipeline_path: str = 'respiratory_rf_pipeline.joblib',
-                 ensemble_path: str = 'respiratory_rf_ensemble.joblib',
+                 pipeline_path: str = 'models/respiratory_rf_pipeline.joblib',
+                 ensemble_path: str = 'models/respiratory_rf_ensemble.joblib',
                  verbose: bool = False):
         """
         Initialize the Respiratory Agent with pre-trained models.

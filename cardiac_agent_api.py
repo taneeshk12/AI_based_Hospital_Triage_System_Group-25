@@ -35,7 +35,7 @@ class CardiacAgent:
         'LOW': 0.0
     }
     
-    def __init__(self, model_path: str = 'xgboost_cardiac_model.pkl'):
+    def __init__(self, model_path: str = 'models/xgboost_cardiac_model.pkl'):
         self.model = None
         self.model_loaded = False
         

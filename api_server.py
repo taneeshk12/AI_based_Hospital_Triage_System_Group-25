@@ -17,6 +17,8 @@ import json
 import os
 import csv
 import numpy as np
+import sqlite3
+import uuid
 
 # HCAI agents and report generator
 try:
@@ -229,10 +231,10 @@ def respiratory_model_info():
 def respiratory_example_patients():
     """Get example respiratory patients for testing"""
     try:
-        with open('example_patient_healthy.json') as f:
+        with open('data/example_patient_healthy.json') as f:
             healthy = json.load(f)
         
-        with open('example_patient_high_risk.json') as f:
+        with open('data/example_patient_high_risk.json') as f:
             high_risk = json.load(f)
         
         return jsonify({
@@ -568,6 +570,45 @@ def unified_predict():
         return jsonify({'error': str(e)}), 400
 
 
+@app.route('/unified/batch', methods=['POST'])
+def unified_batch_predict():
+    """
+    Batch unified prediction for sensitivity analysis (fast, no LLM)
+    """
+    try:
+        patients = request.get_json()
+        if not isinstance(patients, list):
+            return jsonify({'error': 'Body must be a JSON array'}), 400
+        
+        results = []
+        for patient_data in patients:
+            res = {
+                'predictions': {}
+            }
+            if respiratory_agent:
+                resp_res = respiratory_agent.predict(patient_data)
+                res['predictions']['respiratory'] = json.loads(json.dumps(resp_res, cls=NumpyEncoder))
+            if general_agent:
+                gen_res = general_agent.predict(patient_data)
+                res['predictions']['general'] = json.loads(json.dumps(gen_res, cls=NumpyEncoder))
+            if cardiac_agent:
+                card_res = cardiac_agent.predict(patient_data)
+                res['predictions']['cardiac'] = json.loads(json.dumps(card_res, cls=NumpyEncoder))
+            if sepsis_agent:
+                sep_res = sepsis_agent.predict(patient_data)
+                res['predictions']['sepsis'] = json.loads(json.dumps(sep_res, cls=NumpyEncoder))
+                
+            safety_rules = RuleBasedSafetyLayer.check_vitals(patient_data)
+            aggregation = OutputAggregator.aggregate(res['predictions'], safety_rules)
+            res['aggregation'] = aggregation
+            results.append(res)
+            
+        return jsonify({'status': 'success', 'results': results}), 200
+    except Exception as e:
+        logger.error(f"Unified batch prediction error: {e}")
+        return jsonify({'error': str(e)}), 400
+
+
 # ==================== HCAI ENDPOINTS ====================
 
 @app.route('/hcai/analyze', methods=['POST'])
@@ -634,6 +675,12 @@ def hcai_analyze():
 
         logger.info(f"HCAI analysis complete: {report['report_id']} | Risk: {report['risk_prediction']}")
 
+        # Auto-log to SQLite database
+        try:
+            save_assessment_to_db(patient_id, patient_name, patient_data, predictions, aggregation, report)
+        except Exception as db_err:
+            logger.error(f"Failed to auto-log assessment: {db_err}")
+
         return jsonify({
             'status': 'success',
             'report_id': report['report_id'],
@@ -691,9 +738,9 @@ def feedback():
     """
     try:
         data = request.get_json()
-        file_exists = os.path.isfile('feedback_log.csv')
+        file_exists = os.path.isfile('data/feedback_log.csv')
         
-        with open('feedback_log.csv', 'a', newline='') as csvfile:
+        with open('data/feedback_log.csv', 'a', newline='') as csvfile:
             fieldnames = ['timestamp', 'patient_age', 'patient_sex', 'ai_final_risk', 'clinician_override', 'action']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
@@ -714,6 +761,326 @@ def feedback():
         logger.error(f"Feedback logging error: {e}")
         return jsonify({'error': str(e)}), 400
 
+
+# ==================== PATIENT REGISTRY DB SETUP & ENDPOINTS ====================
+
+DATABASE_PATH = 'data/triage_registry.db'
+
+def get_db_connection():
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def init_db():
+    os.makedirs('data', exist_ok=True)
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS patients (
+            patient_id TEXT PRIMARY KEY,
+            patient_name TEXT NOT NULL,
+            age INTEGER NOT NULL,
+            sex TEXT NOT NULL,
+            age_group TEXT,
+            altered_mentation INTEGER,
+            chest_pain INTEGER,
+            diabetes INTEGER,
+            spo2 INTEGER,
+            respiratory_rate INTEGER,
+            temperature REAL,
+            heart_rate INTEGER,
+            systolic_bp INTEGER,
+            diastolic_bp INTEGER,
+            pain_score INTEGER,
+            wbc REAL,
+            hemoglobin REAL,
+            platelet_count REAL,
+            sodium REAL,
+            potassium REAL,
+            creatinine REAL,
+            glucose REAL,
+            troponin REAL,
+            bnp REAL,
+            lactate REAL,
+            inr REAL,
+            created_at TEXT,
+            updated_at TEXT
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS assessments (
+            assessment_id TEXT PRIMARY KEY,
+            patient_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            risk_prediction TEXT NOT NULL,
+            confidence_pct TEXT,
+            llm_summary TEXT,
+            report_data TEXT NOT NULL,
+            FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    logger.info("SQLite registry database initialized successfully.")
+
+def save_assessment_to_db(patient_id, patient_name, patient_data, predictions, aggregation, report):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA foreign_keys = ON;")
+    
+    cursor.execute('SELECT 1 FROM patients WHERE patient_id = ?', (patient_id,))
+    exists = cursor.fetchone() is not None
+    
+    now = datetime.now().isoformat()
+    age = int(patient_data.get('age', 35))
+    
+    if age < 18:
+        age_group = 'pediatric'
+    elif age < 65:
+        age_group = 'adult'
+    elif age < 80:
+        age_group = 'senior'
+    else:
+        age_group = 'elderly'
+        
+    if exists:
+        cursor.execute('''
+            UPDATE patients SET
+                patient_name = ?, age = ?, sex = ?, age_group = ?, altered_mentation = ?,
+                chest_pain = ?, diabetes = ?, spo2 = ?, respiratory_rate = ?, temperature = ?,
+                heart_rate = ?, systolic_bp = ?, diastolic_bp = ?, pain_score = ?,
+                wbc = ?, hemoglobin = ?, platelet_count = ?, sodium = ?, potassium = ?,
+                creatinine = ?, glucose = ?, troponin = ?, bnp = ?, lactate = ?, inr = ?,
+                updated_at = ?
+            WHERE patient_id = ?
+        ''', (
+            patient_name, age, patient_data.get('sex', 'M'), age_group,
+            int(patient_data.get('altered_mentation', 0)), int(patient_data.get('chest_pain', 0)), int(patient_data.get('diabetes', 0)),
+            int(patient_data.get('spo2', 97)), int(patient_data.get('respiratory_rate', 16)), float(patient_data.get('temperature', 36.8)),
+            int(patient_data.get('heart_rate', 70)), int(patient_data.get('systolic_bp', 120)), int(patient_data.get('diastolic_bp', 80)), int(patient_data.get('pain_score', 2)),
+            float(patient_data.get('wbc', 7.5)), float(patient_data.get('hemoglobin', 14.0)), float(patient_data.get('platelet_count', 250)),
+            float(patient_data.get('sodium', 140)), float(patient_data.get('potassium', 4.0)), float(patient_data.get('creatinine', 0.9)),
+            float(patient_data.get('glucose', 100)), float(patient_data.get('troponin', 0.01)), float(patient_data.get('bnp', 50)),
+            float(patient_data.get('lactate', 1.2)), float(patient_data.get('inr', 1.0)),
+            now, patient_id
+        ))
+    else:
+        cursor.execute('''
+            INSERT INTO patients (
+                patient_id, patient_name, age, sex, age_group, altered_mentation,
+                chest_pain, diabetes, spo2, respiratory_rate, temperature,
+                heart_rate, systolic_bp, diastolic_bp, pain_score,
+                wbc, hemoglobin, platelet_count, sodium, potassium,
+                creatinine, glucose, troponin, bnp, lactate, inr,
+                created_at, updated_at
+            ) VALUES (
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
+                ?, ?
+            )
+        ''', (
+            patient_id, patient_name, age, patient_data.get('sex', 'M'), age_group,
+            int(patient_data.get('altered_mentation', 0)), int(patient_data.get('chest_pain', 0)), int(patient_data.get('diabetes', 0)),
+            int(patient_data.get('spo2', 97)), int(patient_data.get('respiratory_rate', 16)), float(patient_data.get('temperature', 36.8)),
+            int(patient_data.get('heart_rate', 70)), int(patient_data.get('systolic_bp', 120)), int(patient_data.get('diastolic_bp', 80)), int(patient_data.get('pain_score', 2)),
+            float(patient_data.get('wbc', 7.5)), float(patient_data.get('hemoglobin', 14.0)), float(patient_data.get('platelet_count', 250)),
+            float(patient_data.get('sodium', 140)), float(patient_data.get('potassium', 4.0)), float(patient_data.get('creatinine', 0.9)),
+            float(patient_data.get('glucose', 100)), float(patient_data.get('troponin', 0.01)), float(patient_data.get('bnp', 50)),
+            float(patient_data.get('lactate', 1.2)), float(patient_data.get('inr', 1.0)),
+            now, now
+        ))
+        
+    cursor.execute('''
+        INSERT OR REPLACE INTO assessments (
+            assessment_id, patient_id, timestamp, risk_prediction, confidence_pct, llm_summary, report_data
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        report.get('report_id'),
+        patient_id,
+        report.get('timestamp', now),
+        report.get('risk_prediction', 'LOW'),
+        str(report.get('confidence_pct', 'N/A')),
+        report.get('llm_interpretation', 'N/A'),
+        json.dumps({
+            'predictions': predictions,
+            'aggregation': aggregation,
+            'report': report
+        })
+    ))
+    
+    conn.commit()
+    conn.close()
+    logger.info(f"Successfully saved assessment {report.get('report_id')} to DB for patient {patient_id}.")
+
+@app.route('/api/patients', methods=['GET'])
+def get_patients():
+    """List all patients with latest risk assessment."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT p.*, a.risk_prediction, a.timestamp as last_assessment_time
+            FROM patients p
+            LEFT JOIN assessments a ON a.timestamp = (
+                SELECT MAX(timestamp) FROM assessments WHERE patient_id = p.patient_id
+            )
+            ORDER BY p.updated_at DESC
+        ''')
+        rows = cursor.fetchall()
+        patients = [dict(row) for row in rows]
+        conn.close()
+        return jsonify({'status': 'success', 'patients': patients}), 200
+    except Exception as e:
+        logger.error(f"Error listing patients: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/patients/<patient_id>', methods=['GET'])
+def get_patient(patient_id):
+    """Get patient telemetry details and assessment history."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM patients WHERE patient_id = ?', (patient_id,))
+        patient_row = cursor.fetchone()
+        if not patient_row:
+            conn.close()
+            return jsonify({'error': f'Patient {patient_id} not found.'}), 404
+            
+        patient = dict(patient_row)
+        
+        cursor.execute('''
+            SELECT assessment_id, timestamp, risk_prediction, confidence_pct, llm_summary, report_data
+            FROM assessments 
+            WHERE patient_id = ? 
+            ORDER BY timestamp DESC
+        ''', (patient_id,))
+        rows = cursor.fetchall()
+        
+        assessments = []
+        for r in rows:
+            assess_dict = dict(r)
+            try:
+                assess_dict['report_data'] = json.loads(assess_dict['report_data'])
+            except Exception:
+                pass
+            assessments.append(assess_dict)
+            
+        patient['assessments'] = assessments
+        conn.close()
+        return jsonify({'status': 'success', 'patient': patient}), 200
+    except Exception as e:
+        logger.error(f"Error getting patient detail: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/patients', methods=['POST'])
+def save_patient():
+    """Upsert a patient profile parameters to the database without forcing assessment."""
+    try:
+        data = request.get_json()
+        patient_id = data.get('patient_id')
+        patient_name = data.get('patient_name', 'Anonymous')
+        
+        if not patient_id:
+            patient_id = 'PT-' + uuid.uuid4().hex[:8].upper()
+            
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT 1 FROM patients WHERE patient_id = ?', (patient_id,))
+        exists = cursor.fetchone() is not None
+        
+        now = datetime.now().isoformat()
+        age = int(data.get('age', 35))
+        
+        if age < 18:
+            age_group = 'pediatric'
+        elif age < 65:
+            age_group = 'adult'
+        elif age < 80:
+            age_group = 'senior'
+        else:
+            age_group = 'elderly'
+            
+        if exists:
+            cursor.execute('''
+                UPDATE patients SET
+                    patient_name = ?, age = ?, sex = ?, age_group = ?, altered_mentation = ?,
+                    chest_pain = ?, diabetes = ?, spo2 = ?, respiratory_rate = ?, temperature = ?,
+                    heart_rate = ?, systolic_bp = ?, diastolic_bp = ?, pain_score = ?,
+                    wbc = ?, hemoglobin = ?, platelet_count = ?, sodium = ?, potassium = ?,
+                    creatinine = ?, glucose = ?, troponin = ?, bnp = ?, lactate = ?, inr = ?,
+                    updated_at = ?
+                WHERE patient_id = ?
+            ''', (
+                patient_name, age, data.get('sex', 'M'), age_group,
+                int(data.get('altered_mentation', 0)), int(data.get('chest_pain', 0)), int(data.get('diabetes', 0)),
+                int(data.get('spo2', 97)), int(data.get('respiratory_rate', 16)), float(data.get('temperature', 36.8)),
+                int(data.get('heart_rate', 70)), int(data.get('systolic_bp', 120)), int(data.get('diastolic_bp', 80)), int(data.get('pain_score', 2)),
+                float(data.get('wbc', 7.5)), float(data.get('hemoglobin', 14.0)), float(data.get('platelet_count', 250)),
+                float(data.get('sodium', 140)), float(data.get('potassium', 4.0)), float(data.get('creatinine', 0.9)),
+                float(data.get('glucose', 100)), float(data.get('troponin', 0.01)), float(data.get('bnp', 50)),
+                float(data.get('lactate', 1.2)), float(data.get('inr', 1.0)),
+                now, patient_id
+            ))
+        else:
+            cursor.execute('''
+                INSERT INTO patients (
+                    patient_id, patient_name, age, sex, age_group, altered_mentation,
+                    chest_pain, diabetes, spo2, respiratory_rate, temperature,
+                    heart_rate, systolic_bp, diastolic_bp, pain_score,
+                    wbc, hemoglobin, platelet_count, sodium, potassium,
+                    creatinine, glucose, troponin, bnp, lactate, inr,
+                    created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?
+                )
+            ''', (
+                patient_id, patient_name, age, data.get('sex', 'M'), age_group,
+                int(data.get('altered_mentation', 0)), int(data.get('chest_pain', 0)), int(data.get('diabetes', 0)),
+                int(data.get('spo2', 97)), int(data.get('respiratory_rate', 16)), float(data.get('temperature', 36.8)),
+                int(data.get('heart_rate', 70)), int(data.get('systolic_bp', 120)), int(data.get('diastolic_bp', 80)), int(data.get('pain_score', 2)),
+                float(data.get('wbc', 7.5)), float(data.get('hemoglobin', 14.0)), float(data.get('platelet_count', 250)),
+                float(data.get('sodium', 140)), float(data.get('potassium', 4.0)), float(data.get('creatinine', 0.9)),
+                float(data.get('glucose', 100)), float(data.get('troponin', 0.01)), float(data.get('bnp', 50)),
+                float(data.get('lactate', 1.2)), float(data.get('inr', 1.0)),
+                now, now
+            ))
+            
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'patient_id': patient_id, 'message': 'Patient record saved successfully.'}), 200
+    except Exception as e:
+        logger.error(f"Error saving patient: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/patients/<patient_id>', methods=['DELETE'])
+def delete_patient(patient_id):
+    """Delete patient and their assessment history from the registry."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM patients WHERE patient_id = ?', (patient_id,))
+        cursor.execute('DELETE FROM assessments WHERE patient_id = ?', (patient_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'status': 'success', 'message': f'Patient {patient_id} and associated history deleted.'}), 200
+    except Exception as e:
+        logger.error(f"Error deleting patient: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ==================== ERROR HANDLERS ====================
 
 @app.errorhandler(404)
@@ -727,6 +1094,9 @@ def server_error(e):
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
+    # Initialize the local SQLite database on startup
+    init_db()
+    
     print("\n" + "="*70)
     print("🩺 OmniHealth Diagnostics — HCAI Multi-Agent API Server")
     print("="*70)
