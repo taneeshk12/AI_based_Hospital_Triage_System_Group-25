@@ -1,4 +1,5 @@
 import json
+import os
 import pickle
 import faiss
 
@@ -8,8 +9,11 @@ model = SentenceTransformer(
     "sentence-transformers/all-MiniLM-L6-v2"
 )
 
+# Resolve paths relative to the Rag_Chatbot root (one level up from rag/)
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 with open(
-    "knowledge_base/knowledge_base.json",
+    os.path.join(_ROOT, "knowledge_base_new.json"),
     "r"
 ) as f:
     kb = json.load(f)
@@ -39,11 +43,11 @@ index.add(embeddings)
 
 faiss.write_index(
     index,
-    "vector_store/faiss.index"
+    os.path.join(_ROOT, "vector_store", "faiss.index")
 )
 
 with open(
-    "vector_store/kb_metadata.pkl",
+    os.path.join(_ROOT, "vector_store", "kb_metadata.pkl"),
     "wb"
 ) as f:
 

@@ -1,4 +1,18 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  User, 
+  HeartPulse, 
+  TestTubes, 
+  MessageSquare, 
+  CheckCircle2, 
+  AlertTriangle, 
+  Play, 
+  Stethoscope, 
+  Beaker,
+  Save,
+  Plus
+} from 'lucide-react';
 
 const CLINICAL_RANGES = {
   age: { min: 0, max: 120, step: 1 },
@@ -38,6 +52,10 @@ export default function IntakePage({
   loadHealthyExample, loadHighRiskExample,
   setRagReport,
   triageMode = 'IMMEDIATE', setTriageMode,
+  patientName, setPatientName,
+  currentPatientId,
+  saveStatus, onSave,
+  onNewPatient,
 }) {
   const [activeTab, setActiveTab] = useState('vitals');
 
@@ -49,7 +67,7 @@ export default function IntakePage({
 
   const renderInput = (label, name, value, type = 'number', unit = '', range = '', options = null, disabled = false) => {
     return (
-      <div className="input-group">
+      <div className="input-group intake-input-group">
         <div className="input-header">
           <label>{label}</label>
           {range && <span className="input-range">{range}</span>}
@@ -85,19 +103,23 @@ export default function IntakePage({
   };
 
   const allTabs = [
-    { key: 'demographics', label: 'Demographics' },
-    { key: 'vitals',       label: 'Vitals & SpO\u2082' },
-    { key: 'labs',         label: 'Lab Reports' },
-    { key: 'symptoms',     label: '\uD83D\uDCDD Symptoms' },
+    { key: 'demographics', label: 'Demographics', icon: <User size={16} /> },
+    { key: 'vitals',       label: 'Vitals & SpO₂', icon: <HeartPulse size={16} /> },
+    { key: 'labs',         label: 'Lab Reports', icon: <TestTubes size={16} /> },
+    { key: 'symptoms',     label: 'Symptoms', icon: <MessageSquare size={16} /> },
   ];
 
-  // In Immediate mode, hide the Lab Reports tab entirely
   const tabs = triageMode === 'IMMEDIATE'
     ? allTabs.filter(t => t.key !== 'labs')
     : allTabs;
 
   return (
-    <div className="page-container animate-fade-in">
+    <motion.div 
+      initial={{ opacity: 0, y: 15 }} 
+      animate={{ opacity: 1, y: 0 }} 
+      transition={{ duration: 0.4 }}
+      className="page-container"
+    >
       <div className="page-header">
         <div>
           <h2 className="page-title">Patient Triage Intake</h2>
@@ -105,18 +127,56 @@ export default function IntakePage({
         </div>
         <div className="intake-preset-group">
           <button className="btn outline preset-btn" onClick={loadHealthyExample}>
-            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <CheckCircle2 size={14} />
             Healthy Preset
           </button>
           <button className="btn outline preset-btn critical" onClick={loadHighRiskExample}>
-            <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <AlertTriangle size={14} />
             Critical Preset
           </button>
         </div>
       </div>
 
+      {/* Patient Profile & Registry Card */}
+      <div className="patient-registry-card glass-panel" style={{ padding: '16px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minWidth: '220px' }}>
+          <label style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>Patient Name (Optional)</label>
+          <input
+            type="text"
+            value={patientName}
+            onChange={e => setPatientName(e.target.value)}
+            placeholder="Anonymous Patient / Enter name..."
+            style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--input-bg)', color: 'var(--text-primary)', fontSize: '0.85rem', width: '100%' }}
+          />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', minWidth: '160px' }}>
+          <label style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-secondary)' }}>Generated Patient ID</label>
+          <code style={{ background: 'var(--input-bg)', border: '1px solid var(--border-color)', padding: '8px 12px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)', display: 'inline-block' }}>{currentPatientId}</code>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignSelf: 'flex-end', height: '36px', minWidth: '280px' }}>
+          <button
+            className={`topbar-btn save-btn ${saveStatus === 'saving' ? 'saving' : saveStatus === 'saved' ? 'saved' : saveStatus === 'error' ? 'error' : ''}`}
+            onClick={onSave}
+            disabled={saveStatus === 'saving' || loading}
+            style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+          >
+            {saveStatus === 'saving' && <><span className="spinner" style={{ width: '12px', height: '12px', borderWidth: '1.5px' }}></span> Saving...</>}
+            {saveStatus === 'saved' && <>✓ Saved</>}
+            {saveStatus === 'error' && <>⚠️ Failed</>}
+            {!saveStatus && <><Save size={14} /> Save Patient</>}
+          </button>
+          <button 
+            className="topbar-btn new-btn" 
+            onClick={onNewPatient}
+            style={{ flex: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}
+          >
+            <Plus size={14} /> New Patient
+          </button>
+        </div>
+      </div>
+
       {/* Triage Mode Selector */}
-      <div className="triage-mode-container animate-fade-in">
+      <div className="triage-mode-container glass-panel" style={{ padding: '16px', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-secondary)' }}>Triage Assessment Level</label>
         <div className="triage-mode-selector">
           <button
@@ -124,126 +184,143 @@ export default function IntakePage({
             className={`triage-mode-btn ${triageMode === 'IMMEDIATE' ? 'active' : ''}`}
             onClick={() => setTriageMode('IMMEDIATE')}
           >
-            🩺 Immediate Triage (ER Arrival)
+            <Stethoscope size={16} style={{ marginRight: 6 }} /> Immediate Triage (ER Arrival)
           </button>
           <button
             type="button"
             className={`triage-mode-btn ${triageMode === 'ENHANCED' ? 'active' : ''}`}
             onClick={() => setTriageMode('ENHANCED')}
           >
-            🧪 Enhanced Triage (Labs Available)
+            <Beaker size={16} style={{ marginRight: 6 }} /> Enhanced Triage (Labs Available)
           </button>
         </div>
       </div>
 
-
-
       {/* Tab Nav */}
-      <div className="tab-navigation">
+      <div className="tab-navigation intake-tabs" style={{ display: 'flex', gap: '4px' }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
-            className={`tab-btn ${activeTab === tab.key ? 'active' : ''}`}
+            className={`tab-btn intake-tab-btn ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.key)}
             type="button"
+            style={{ flex: 1, justifyContent: 'center' }}
           >
-            <span>{tab.label}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {tab.icon}
+              {tab.label}
+            </span>
           </button>
         ))}
       </div>
 
       {/* Tab Panels */}
       <div className="intake-panels-grid">
-        {activeTab === 'demographics' && (
-          <div className="form-tab-panel animate-fade-in glass-panel">
-            <div className="form-section-title">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Patient Demographics
-            </div>
-            <div className="form-grid">
-              {renderInput('Age', 'age', patientData.age, 'number', 'yrs', 'Range: 0\u2013120')}
-              {renderInput('Sex', 'sex', patientData.sex, 'text', '', '', [{ val: 'M', lbl: 'Male' }, { val: 'F', lbl: 'Female' }])}
-              {renderInput('Altered Mentation', 'altered_mentation', patientData.altered_mentation, 'number', '', '', [{ val: 0, lbl: 'Alert / Normal' }, { val: 1, lbl: 'Confused / Altered' }])}
-              {renderInput('Chest Pain', 'chest_pain', patientData.chest_pain, 'number', '', '', [{ val: 0, lbl: 'No / Absent' }, { val: 1, lbl: 'Yes / Present' }])}
-              {renderInput('Diabetes', 'diabetes', patientData.diabetes, 'number', '', '', [{ val: 0, lbl: 'No History' }, { val: 1, lbl: 'Diabetic' }])}
-              {renderInput('Pain Score (Auto)', 'pain_score', patientData.pain_score, 'number', '/10', 'Auto-calculated', null, true)}
-            </div>
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {activeTab === 'demographics' && (
+            <motion.div 
+              key="demographics"
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }}
+              className="form-tab-panel glass-panel"
+            >
+              <div className="form-section-title">
+                <User size={16} /> Patient Demographics
+              </div>
+              <div className="form-grid">
+                {renderInput('Age', 'age', patientData.age, 'number', 'yrs', 'Range: 0–120')}
+                {renderInput('Sex', 'sex', patientData.sex, 'text', '', '', [{ val: 'M', lbl: 'Male' }, { val: 'F', lbl: 'Female' }])}
+                {renderInput('Altered Mentation', 'altered_mentation', patientData.altered_mentation, 'number', '', '', [{ val: 0, lbl: 'Alert / Normal' }, { val: 1, lbl: 'Confused / Altered' }])}
+                {renderInput('Chest Pain', 'chest_pain', patientData.chest_pain, 'number', '', '', [{ val: 0, lbl: 'No / Absent' }, { val: 1, lbl: 'Yes / Present' }])}
+                {renderInput('Diabetes', 'diabetes', patientData.diabetes, 'number', '', '', [{ val: 0, lbl: 'No History' }, { val: 1, lbl: 'Diabetic' }])}
+                {renderInput('Pain Score (Auto)', 'pain_score', patientData.pain_score, 'number', '/10', 'Auto-calculated', null, true)}
+              </div>
+            </motion.div>
+          )}
 
-        {activeTab === 'vitals' && (
-          <div className="form-tab-panel animate-fade-in glass-panel">
-            <div className="form-section-title">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-              Vital Signs &amp; SpO\u2082
-            </div>
-            <div className="form-grid">
-              {renderInput('SpO\u2082', 'spo2', patientData.spo2, 'number', '%', 'Target: 95\u2013100%')}
-              {renderInput('Resp Rate', 'respiratory_rate', patientData.respiratory_rate, 'number', '/min', 'Normal: 12\u201320')}
-              {renderInput('Temperature', 'temperature', patientData.temperature, 'number', '\u00b0C', 'Normal: 36.5\u201337.5')}
-              {renderInput('Heart Rate', 'heart_rate', patientData.heart_rate, 'number', 'bpm', 'Normal: 60\u2013100')}
-              {renderInput('Systolic BP', 'systolic_bp', patientData.systolic_bp, 'number', 'mmHg', 'Normal: 90\u2013120')}
-              {renderInput('Diastolic BP', 'diastolic_bp', patientData.diastolic_bp, 'number', 'mmHg', 'Normal: 60\u201380')}
-            </div>
-          </div>
-        )}
+          {activeTab === 'vitals' && (
+            <motion.div 
+              key="vitals"
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }}
+              className="form-tab-panel glass-panel"
+            >
+              <div className="form-section-title">
+                <HeartPulse size={16} /> Vital Signs &amp; SpO₂
+              </div>
+              <div className="form-grid">
+                {renderInput('SpO₂', 'spo2', patientData.spo2, 'number', '%', 'Target: 95–100%')}
+                {renderInput('Resp Rate', 'respiratory_rate', patientData.respiratory_rate, 'number', '/min', 'Normal: 12–20')}
+                {renderInput('Temperature', 'temperature', patientData.temperature, 'number', '°C', 'Normal: 36.5–37.5')}
+                {renderInput('Heart Rate', 'heart_rate', patientData.heart_rate, 'number', 'bpm', 'Normal: 60–100')}
+                {renderInput('Systolic BP', 'systolic_bp', patientData.systolic_bp, 'number', 'mmHg', 'Normal: 90–120')}
+                {renderInput('Diastolic BP', 'diastolic_bp', patientData.diastolic_bp, 'number', 'mmHg', 'Normal: 60–80')}
+              </div>
+            </motion.div>
+          )}
 
-        {activeTab === 'labs' && (
-          <div className="form-tab-panel animate-fade-in glass-panel">
-            <div className="form-section-title">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2v-4M9 21H5a2 2 0 0 1-2-2v-4m0 0h18"/></svg>
-              Laboratory Results
-            </div>
-            <div className="form-grid-labs">
-              {renderInput('WBC Count', 'wbc', patientData.wbc, 'number', 'k/\u00b5L', 'Normal: 4.5\u201311.0')}
-              {renderInput('Hemoglobin', 'hemoglobin', patientData.hemoglobin, 'number', 'g/dL', 'Normal: 12.0\u201317.5')}
-              {renderInput('Platelets', 'platelet_count', patientData.platelet_count, 'number', 'k/\u00b5L', 'Normal: 150\u2013450')}
-              {renderInput('Sodium', 'sodium', patientData.sodium, 'number', 'mEq/L', 'Normal: 135\u2013145')}
-              {renderInput('Potassium', 'potassium', patientData.potassium, 'number', 'mEq/L', 'Normal: 3.5\u20135.0')}
-              {renderInput('Creatinine', 'creatinine', patientData.creatinine, 'number', 'mg/dL', 'Normal: 0.6\u20131.2')}
-              {renderInput('Glucose', 'glucose', patientData.glucose, 'number', 'mg/dL', 'Normal: 70\u2013140')}
-              {renderInput('Troponin', 'troponin', patientData.troponin, 'number', 'ng/mL', 'Normal: < 0.04')}
-              {renderInput('BNP', 'bnp', patientData.bnp, 'number', 'pg/mL', 'Normal: < 100')}
-              {renderInput('Lactate', 'lactate', patientData.lactate, 'number', 'mmol/L', 'Normal: 0.5\u20132.2')}
-              {renderInput('INR', 'inr', patientData.inr, 'number', '', 'Normal: 0.8\u20131.2')}
-            </div>
-          </div>
-        )}
+          {activeTab === 'labs' && (
+            <motion.div 
+              key="labs"
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }}
+              className="form-tab-panel glass-panel"
+            >
+              <div className="form-section-title">
+                <TestTubes size={16} /> Laboratory Results
+              </div>
+              <div className="form-grid-labs">
+                {renderInput('WBC Count', 'wbc', patientData.wbc, 'number', 'k/µL', 'Normal: 4.5–11.0')}
+                {renderInput('Hemoglobin', 'hemoglobin', patientData.hemoglobin, 'number', 'g/dL', 'Normal: 12.0–17.5')}
+                {renderInput('Platelets', 'platelet_count', patientData.platelet_count, 'number', 'k/µL', 'Normal: 150–450')}
+                {renderInput('Sodium', 'sodium', patientData.sodium, 'number', 'mEq/L', 'Normal: 135–145')}
+                {renderInput('Potassium', 'potassium', patientData.potassium, 'number', 'mEq/L', 'Normal: 3.5–5.0')}
+                {renderInput('Creatinine', 'creatinine', patientData.creatinine, 'number', 'mg/dL', 'Normal: 0.6–1.2')}
+                {renderInput('Glucose', 'glucose', patientData.glucose, 'number', 'mg/dL', 'Normal: 70–140')}
+                {renderInput('Troponin', 'troponin', patientData.troponin, 'number', 'ng/mL', 'Normal: < 0.04')}
+                {renderInput('BNP', 'bnp', patientData.bnp, 'number', 'pg/mL', 'Normal: < 100')}
+                {renderInput('Lactate', 'lactate', patientData.lactate, 'number', 'mmol/L', 'Normal: 0.5–2.2')}
+                {renderInput('INR', 'inr', patientData.inr, 'number', '', 'Normal: 0.8–1.2')}
+              </div>
+            </motion.div>
+          )}
 
-        {activeTab === 'symptoms' && (
-          <div className="form-tab-panel animate-fade-in glass-panel">
-            <div className="form-section-title">
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-              </svg>
-              Patient Symptoms
-              <span className="chat-badge">FAISS \u00b7 Groq llama-3.3-70b</span>
-            </div>
-            
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.5' }}>
-              Describe the patient's symptoms in plain text. When you run the risk analysis, this will be automatically combined with the patient's demographics and vitals to generate a detailed symptom analysis using the FAISS/Groq RAG system.
-            </p>
+          {activeTab === 'symptoms' && (
+            <motion.div 
+              key="symptoms"
+              initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }}
+              className="form-tab-panel glass-panel"
+            >
+              <div className="form-section-title">
+                <MessageSquare size={16} /> Patient Symptoms
+                <span className="chat-badge">FAISS · Groq llama-3.3-70b</span>
+              </div>
+              
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.5' }}>
+                Describe the patient's symptoms in plain text. When you run the risk analysis, this will be automatically combined with the patient's demographics and vitals to generate a detailed symptom analysis using the FAISS/Groq RAG system.
+              </p>
 
-            <textarea
-              className="chat-textarea"
-              name="symptoms"
-              placeholder="e.g. 65-year-old male with severe shortness of breath, chest pain, and altered mentation..."
-              value={patientData.symptoms || ''}
-              onChange={handleInputChange}
-              rows={8}
-              style={{ width: '100%', marginBottom: '1rem', borderRadius: '10px', padding: '12px', background: 'var(--input-bg)', color: 'var(--text-primary)', border: '1px solid var(--input-border)', fontFamily: 'inherit', fontSize: '0.85rem', resize: 'vertical' }}
-            />
-          </div>
-        )}
+              <textarea
+                className="chat-textarea"
+                name="symptoms"
+                placeholder="e.g. 65-year-old male with severe shortness of breath, chest pain, and altered mentation..."
+                value={patientData.symptoms || ''}
+                onChange={handleInputChange}
+                rows={8}
+                style={{ width: '100%', marginBottom: '1rem', borderRadius: '10px', padding: '12px', background: 'var(--input-bg)', color: 'var(--text-primary)', border: '1px solid var(--input-border)', fontFamily: 'inherit', fontSize: '0.85rem', resize: 'vertical' }}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Analyze Button */}
       <div className="intake-analyze-section">
-        {error && <div className="error-msg">\u26a0\uFE0F {error}</div>}
-        <button
+        {error && <div className="error-msg">⚠️ {error}</div>}
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.98 }}
           className="btn primary full-width predict-btn"
           onClick={handlePredict}
           disabled={loading || !apiStatus}
+          style={{ padding: '14px', fontSize: '1rem', marginTop: '1rem' }}
         >
           {loading ? (
             <span className="spinner-group">
@@ -252,17 +329,15 @@ export default function IntakePage({
             </span>
           ) : (
             <>
-              <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="5 3 19 12 5 21 5 3"/>
-              </svg>
+              <Play size={18} fill="currentColor" />
               Run Clinical Risk Analysis
             </>
           )}
-        </button>
+        </motion.button>
         {!apiStatus && (
-          <p className="api-offline-note">\u26a0\uFE0F API engine is offline. Start the backend server to analyze.</p>
+          <p className="api-offline-note">⚠️ API engine is offline. Start the backend server to analyze.</p>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }

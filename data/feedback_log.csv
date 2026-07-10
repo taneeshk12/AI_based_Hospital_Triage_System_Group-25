@@ -50,3 +50,4 @@ timestamp,patient_age,patient_sex,ai_final_risk,clinician_override,action
 2026-06-17T16:47:56.555180,30,F,MID,MID,accept
 2026-06-18T01:54:56.555180,80,M,LOW,LOW,accept
 2026-06-19T13:45:32.075626,44,F,MEDIUM,HIGH,override
+2026-07-10T17:00:13.350137,35,M,LOW,LOW,accept

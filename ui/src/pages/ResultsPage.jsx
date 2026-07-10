@@ -3,35 +3,23 @@ import {
   Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-
-const HeartPulseIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg pulsing-icon">
-    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-  </svg>
-);
-const LungsIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <path d="M12 4v16M12 7c-2.5-3-7-3-9 0v7c2.2 3 6.8 3 9 0M12 7c2.5-3 7-3 9 0v7c-2.2 3-6.8 3-9 0" />
-    <path d="M5 14c1-1 2-1 3 0M16 14c1-1 2-1 3 0" />
-  </svg>
-);
-const MicrobeIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="2" />
-    <path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l2.5 2.5M16.5 16.5 19 19M19 5l-2.5 2.5M7.5 16.5 5 19" />
-  </svg>
-);
-const ShieldIcon = () => (
-  <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" className="icon-svg">
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-  </svg>
-);
-const ChevronDownIcon = ({ expanded }) => (
-  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"
-    style={{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}>
-    <polyline points="6 9 12 15 18 9" />
-  </svg>
-);
+import { motion, AnimatePresence } from 'framer-motion';
+import emptyResultsImg from '../assets/empty-results.png';
+import { 
+  Activity, 
+  Wind, 
+  Bug, 
+  ShieldCheck, 
+  ChevronDown, 
+  Stethoscope, 
+  Download, 
+  CheckCircle2, 
+  AlertTriangle,
+  Bot,
+  MessageSquare,
+  ClipboardCheck,
+  Lock
+} from 'lucide-react';
 
 const getRiskColor = (riskLevel) => {
   if (!riskLevel) return '#94a3b8';
@@ -46,7 +34,7 @@ function AgentCard({ title, modelKey, data, expandedAgents, setExpandedAgents })
   if (data.status === 'error') {
     return (
       <div className="prediction-card error-card">
-        <div className="card-header"><h3>{title}</h3><span className="error-icon">⚠️</span></div>
+        <div className="card-header"><h3>{title}</h3><AlertTriangle size={20} className="error-icon" /></div>
         <p className="error-desc">Assessment Failed: {data.error_message}</p>
       </div>
     );
@@ -60,17 +48,24 @@ function AgentCard({ title, modelKey, data, expandedAgents, setExpandedAgents })
   const riskLabel = data.risk_level ? data.risk_level.replace('_RISK', '') : 'N/A';
   const confidencePct = data.confidence != null ? (data.confidence * 100).toFixed(1) : 'N/A';
   const confidencePctInt = data.confidence != null ? (data.confidence * 100).toFixed(0) : '0';
-  let AgentIcon = ShieldIcon;
-  if (modelKey === 'respiratory') AgentIcon = LungsIcon;
-  else if (modelKey === 'cardiac') AgentIcon = HeartPulseIcon;
-  else if (modelKey === 'sepsis') AgentIcon = MicrobeIcon;
+  
+  let AgentIcon = ShieldCheck;
+  if (modelKey === 'respiratory') AgentIcon = Wind;
+  else if (modelKey === 'cardiac') AgentIcon = Activity;
+  else if (modelKey === 'sepsis') AgentIcon = Bug;
+  
   const isExpanded = !!expandedAgents[modelKey];
 
   return (
-    <div className={`prediction-card ${isExpanded ? 'expanded' : 'collapsed'}`} style={{ '--card-color': color }}>
+    <motion.div 
+      layout
+      transition={{ duration: 0.3 }}
+      className={`prediction-card ${isExpanded ? 'expanded' : 'collapsed'}`} 
+      style={{ '--card-color': color }}
+    >
       <div className="card-header clickable-header" onClick={() => setExpandedAgents(prev => ({ ...prev, [modelKey]: !prev[modelKey] }))}>
         <div className="card-title-group">
-          <span className="card-icon-container" style={{ color }}><AgentIcon /></span>
+          <span className="card-icon-container" style={{ color }}><AgentIcon size={22} /></span>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ margin: 0 }}>{title}</h3>
             {!isExpanded && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Click to view analysis</span>}
@@ -83,71 +78,85 @@ function AgentCard({ title, modelKey, data, expandedAgents, setExpandedAgents })
               {confidencePctInt}%
             </span>
           </div>
-          <div className="expand-toggle" style={{ color: 'var(--text-muted)' }}><ChevronDownIcon expanded={isExpanded} /></div>
+          <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} style={{ color: 'var(--text-muted)' }}>
+            <ChevronDown size={18} />
+          </motion.div>
         </div>
       </div>
-      {isExpanded && (
-        <div className="card-body animate-slide-down">
-          <div className="confidence-meter-container">
-            <div className="confidence-header">
-              <span>Agent Confidence</span>
-              <span className="confidence-value" style={{ color }}>{confidencePct}%</span>
-            </div>
-            <div className="confidence-bar-wrapper">
-              <div className="confidence-bar-fill" style={{ width: `${data.confidence != null ? data.confidence * 100 : 0}%`, backgroundColor: color }}>
-                <span className="confidence-pulse-dot" style={{ backgroundColor: color }}></span>
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }} 
+            animate={{ opacity: 1, height: 'auto' }} 
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="card-body"
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="confidence-meter-container">
+              <div className="confidence-header">
+                <span>Agent Confidence</span>
+                <span className="confidence-value" style={{ color }}>{confidencePct}%</span>
+              </div>
+              <div className="confidence-bar-wrapper">
+                <div className="confidence-bar-fill" style={{ width: `${data.confidence != null ? data.confidence * 100 : 0}%`, backgroundColor: color }}>
+                  <span className="confidence-pulse-dot" style={{ backgroundColor: color }}></span>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="action-text">
-            <span className="action-label">Recommendation:</span>
-            <p>{data.clinical_action}</p>
-          </div>
-          <div className="probabilities-section">
-            <span className="section-small-title">Risk Distribution</span>
-            <div className="probabilities-bar">
-              {probs && (
-                <>
-                  <div className="prob-segment" style={{ width: `${probs.low * 100}%`, backgroundColor: '#10b981' }}></div>
-                  <div className="prob-segment" style={{ width: `${probs.medium * 100}%`, backgroundColor: '#f59e0b' }}></div>
-                  <div className="prob-segment" style={{ width: `${probs.high * 100}%`, backgroundColor: '#ef4444' }}></div>
-                </>
-              )}
+            <div className="action-text">
+              <span className="action-label">Recommendation:</span>
+              <p>{data.clinical_action}</p>
             </div>
-            <div className="probabilities-labels">
-              <span>L: {((probs?.low || 0) * 100).toFixed(0)}%</span>
-              <span>M: {((probs?.medium || 0) * 100).toFixed(0)}%</span>
-              <span>H: {((probs?.high || 0) * 100).toFixed(0)}%</span>
-            </div>
-          </div>
-          <div className="shap-section">
-            <h4 className="shap-title">Key Clinical Drivers</h4>
-            {data.top_contributing_features && data.top_contributing_features.length > 0 ? (
-              <div className="shap-bars">
-                {data.top_contributing_features.map((feat, idx) => {
-                  const maxVal = Math.max(...data.top_contributing_features.map(f => Math.abs(f.value)), 0.001);
-                  const percentage = Math.min(100, Math.max(10, (Math.abs(feat.value) / maxVal) * 100));
-                  const isPositive = feat.impact === 'positive';
-                  return (
-                    <div key={idx} className="shap-row-modern">
-                      <div className="shap-label-row">
-                        <span className="shap-feat-name">{feat.feature.replace(/_/g, ' ')}</span>
-                        <span className={`shap-feat-impact-tag ${isPositive ? 'positive' : 'negative'}`}>
-                          {isPositive ? '↑' : '↓'} {Math.abs(feat.value).toFixed(2)}
-                        </span>
-                      </div>
-                      <div className="shap-track-modern">
-                        <div className={`shap-fill-modern ${isPositive ? 'risk-up' : 'risk-down'}`} style={{ width: `${percentage}%` }}></div>
-                      </div>
-                    </div>
-                  );
-                })}
+            <div className="probabilities-section">
+              <span className="section-small-title">Risk Distribution</span>
+              <div className="probabilities-bar">
+                {probs && (
+                  <>
+                    <div className="prob-segment" style={{ width: `${probs.low * 100}%`, backgroundColor: '#10b981' }}></div>
+                    <div className="prob-segment" style={{ width: `${probs.medium * 100}%`, backgroundColor: '#f59e0b' }}></div>
+                    <div className="prob-segment" style={{ width: `${probs.high * 100}%`, backgroundColor: '#ef4444' }}></div>
+                  </>
+                )}
               </div>
-            ) : <div className="shap-empty">Baseline values detected</div>}
-          </div>
-        </div>
-      )}
-    </div>
+              <div className="probabilities-labels">
+                <span>L: {((probs?.low || 0) * 100).toFixed(0)}%</span>
+                <span>M: {((probs?.medium || 0) * 100).toFixed(0)}%</span>
+                <span>H: {((probs?.high || 0) * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+            <div className="shap-section">
+              <h4 className="shap-title">Key Clinical Drivers</h4>
+              {data.top_contributing_features && data.top_contributing_features.length > 0 ? (
+                <div className="shap-bars">
+                  {data.top_contributing_features.map((feat, idx) => {
+                    const maxVal = Math.max(...data.top_contributing_features.map(f => Math.abs(f.value)), 0.001);
+                    const percentage = Math.min(100, Math.max(10, (Math.abs(feat.value) / maxVal) * 100));
+                    const isPositive = feat.impact === 'positive';
+                    return (
+                      <div key={idx} className="shap-row-modern">
+                        <div className="shap-label-row">
+                          <span className="shap-feat-name">{feat.feature.replace(/_/g, ' ')}</span>
+                          <span className={`shap-feat-impact-tag ${isPositive ? 'positive' : 'negative'}`}>
+                            {isPositive ? '↑' : '↓'} {Math.abs(feat.value).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="shap-track-modern">
+                          <motion.div 
+                            initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 0.5, delay: idx * 0.1 }}
+                            className={`shap-fill-modern ${isPositive ? 'risk-up' : 'risk-down'}`} 
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : <div className="shap-empty">Baseline values detected</div>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -161,16 +170,13 @@ export default function ResultsPage({
 }) {
   if (!predictions) {
     return (
-      <div className="page-container animate-fade-in">
-        <div className="empty-state glass-panel" style={{ margin: 'auto', maxWidth: 600 }}>
-          <div className="radar-sonar-container">
-            <div className="sonar-wave"></div>
-            <div className="sonar-center">🩺</div>
-          </div>
-          <h2>No Analysis Yet</h2>
-          <p>Go to <strong>Triage Intake</strong>, enter patient data, and click <strong>Run Clinical Risk Analysis</strong>.</p>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="page-container">
+        <div className="empty-state glass-panel" style={{ margin: 'auto', maxWidth: 500, textAlign: 'center', padding: '3rem 2rem' }}>
+          <img src={emptyResultsImg} alt="No Results" style={{ width: '100%', maxWidth: '250px', marginBottom: '1.5rem', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }} />
+          <h2>No Results Available</h2>
+          <p>Please complete a <strong>Triage Intake</strong> analysis first to generate an AI assessment report.</p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -192,7 +198,7 @@ export default function ResultsPage({
   ];
 
   return (
-    <div className="page-container animate-fade-in">
+    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="page-container">
       <div className="page-header">
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -207,95 +213,77 @@ export default function ResultsPage({
         </div>
         {fullReport && (
           <button className="btn outline" onClick={downloadReport} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
+            <Download size={16} />
             Download PDF
           </button>
         )}
       </div>
 
-      {/* FEATURE 7 — DASHBOARD INTEGRATION CARDS */}
-      <div className="metrics-dashboard-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-        gap: '15px',
-        marginBottom: '1.5rem'
-      }}>
-        {/* Prediction Card */}
-        <div className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${riskColor}` }}>
+      {/* DASHBOARD INTEGRATION CARDS */}
+      <motion.div 
+        initial="hidden" animate="show"
+        variants={{
+          hidden: { opacity: 0 },
+          show: { opacity: 1, transition: { staggerChildren: 0.1 } }
+        }}
+        className="metrics-dashboard-grid" 
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '15px', marginBottom: '1.5rem' }}
+      >
+        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${riskColor}` }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Prediction</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: riskColor, margin: '8px 0 4px 0' }}>
-            {aggregation?.final_risk}_RISK
-          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: riskColor, margin: '8px 0 4px 0' }}>{aggregation?.final_risk}_RISK</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {aggregation?.safety_alerts && aggregation.safety_alerts.length > 0 ? "⚠️ Safety Override active" : "Consensus risk level"}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Confidence Card */}
-        <div className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: '4px solid #3b82f6' }}>
+        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: '4px solid #3b82f6' }}>
           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Confidence</div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6', margin: '8px 0 4px 0' }}>
-            {((aggregation?.overall_confidence || 0) * 100).toFixed(0)}%
-          </div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6', margin: '8px 0 4px 0' }}>{((aggregation?.overall_confidence || 0) * 100).toFixed(0)}%</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>
             {aggregation?.overall_confidence >= 0.85 ? "HIGH" : aggregation?.overall_confidence >= 0.70 ? "MEDIUM" : "LOW"} CONFIDENCE
           </div>
-        </div>
+        </motion.div>
 
-        {/* Trust Score Card */}
         {(() => {
           const tColor = aggregation?.trust_score >= 80 ? '#10b981' : aggregation?.trust_score >= 60 ? '#f59e0b' : '#ef4444';
           return (
-            <div className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${tColor}` }}>
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${tColor}` }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Trust Score</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: tColor, margin: '8px 0 4px 0' }}>
-                {aggregation?.trust_score}%
-              </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>
-                {aggregation?.trust_category}
-              </div>
-            </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: tColor, margin: '8px 0 4px 0' }}>{aggregation?.trust_score}%</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>{aggregation?.trust_category}</div>
+            </motion.div>
           );
         })()}
 
-        {/* Safety Status Card */}
         {(() => {
           const sColor = aggregation?.safety_status === 'AGREEMENT' ? '#10b981' : '#ef4444';
           return (
-            <div className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${sColor}` }}>
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${sColor}` }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Safety Status</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: sColor, margin: '8px 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {aggregation?.safety_status}
-              </div>
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                Score: <strong>{aggregation?.safety_score}/100</strong>
-              </div>
-            </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: sColor, margin: '8px 0 4px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{aggregation?.safety_status}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Score: <strong>{aggregation?.safety_score}/100</strong></div>
+            </motion.div>
           );
         })()}
 
-        {/* Human Review Status Card */}
         {(() => {
           const rColor = aggregation?.human_review_required ? '#ef4444' : '#10b981';
           return (
-            <div className="glass-panel animate-fade-in" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${rColor}` }}>
+            <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderLeft: `4px solid ${rColor}` }}>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Human Review</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: rColor, margin: '8px 0 4px 0' }}>
-                {aggregation?.human_review_required ? "REQUIRED" : "NO"}
-              </div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: rColor, margin: '8px 0 4px 0' }}>{aggregation?.human_review_required ? "REQUIRED" : "NO"}</div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }} title={aggregation?.human_review_reason || 'Standard review'}>
                 {aggregation?.human_review_required ? `Reason: ${aggregation.human_review_reason}` : "Standard oversight"}
               </div>
-            </div>
+            </motion.div>
           );
         })()}
-      </div>
+      </motion.div>
 
       {/* Clinical Safety Alerts Banner */}
       {aggregation?.safety_alerts && aggregation.safety_alerts.length > 0 && (
-        <div className="clinical-safety-banner" style={{
+        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="clinical-safety-banner" style={{
           backgroundColor: 'rgba(239, 68, 68, 0.08)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
           borderRadius: '8px',
@@ -305,7 +293,7 @@ export default function ResultsPage({
           gap: '15px',
           alignItems: 'flex-start',
         }}>
-          <span style={{ fontSize: '1.6rem', color: '#ef4444', lineHeight: 1 }}>🚨</span>
+          <AlertTriangle color="#ef4444" size={28} />
           <div>
             <h4 style={{ margin: '0 0 6px 0', color: '#ef4444', fontWeight: 700, fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
               Critical Clinical Safety Alerts
@@ -329,12 +317,12 @@ export default function ResultsPage({
               ))}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Uncertainty & Reliability Analysis Banner */}
       {aggregation?.uncertainty_high && (
-        <div className="uncertainty-banner" style={{
+        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="uncertainty-banner" style={{
           backgroundColor: 'rgba(245, 158, 11, 0.06)',
           border: '1px solid rgba(245, 158, 11, 0.3)',
           borderRadius: '8px',
@@ -344,7 +332,7 @@ export default function ResultsPage({
           gap: '15px',
           alignItems: 'flex-start',
         }}>
-          <span style={{ fontSize: '1.6rem', color: '#f59e0b', lineHeight: 1 }}>⚠️</span>
+          <AlertTriangle color="#f59e0b" size={28} />
           <div style={{ width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '8px' }}>
               <h4 style={{ margin: 0, color: '#f59e0b', fontWeight: 700, fontSize: '1rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -384,14 +372,14 @@ export default function ResultsPage({
               <strong>Attending Clinician Guidance:</strong> {aggregation.uncertainty_explanation}
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Assessment History Timeline */}
       {activePatientAssessments.length > 0 && (
         <div className="assessment-history-panel glass-panel" style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '1rem' }}>
-            <span style={{ fontSize: '1rem' }}>📋</span>
+            <ClipboardCheck size={20} />
             <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Assessment History</h3>
             <span style={{ marginLeft: 'auto', fontSize: '0.75rem', opacity: 0.5 }}>{activePatientAssessments.length} run{activePatientAssessments.length > 1 ? 's' : ''}</span>
           </div>
@@ -424,9 +412,13 @@ export default function ResultsPage({
       {aggregation && (
         <div className="results-top-grid">
           {/* Risk Gauge */}
-          <div className="risk-gauge-card glass-panel">
-            <div className="risk-gauge-title">Overall Triage Risk</div>
-            <div className="risk-gauge-wrapper">
+          <div className="risk-gauge-card glass-panel" style={{ position: 'relative', overflow: 'hidden' }}>
+            {/* Background ECG animation */}
+            <svg style={{ position: 'absolute', top: '10%', left: 0, width: '100%', height: '80%', opacity: 0.1, zIndex: 0 }} viewBox="0 0 500 100" preserveAspectRatio="none">
+              <path className="ecg-line" d="M0,50 L100,50 L120,20 L140,90 L160,10 L180,50 L500,50" fill="none" stroke={riskColor} strokeWidth="2" />
+            </svg>
+            <div className="risk-gauge-title" style={{ zIndex: 1, position: 'relative' }}>Overall Triage Risk</div>
+            <div className="risk-gauge-wrapper ring-gauge-container" style={{ zIndex: 1, position: 'relative' }}>
               <svg viewBox="0 0 200 110" className="risk-gauge-svg">
                 <defs>
                   <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -434,18 +426,25 @@ export default function ResultsPage({
                     <stop offset="50%" stopColor="#f59e0b" />
                     <stop offset="100%" stopColor="#ef4444" />
                   </linearGradient>
+                  <filter id="neonGlow">
+                    <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                    <feMerge>
+                      <feMergeNode in="coloredBlur"/>
+                      <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                  </filter>
                 </defs>
-                <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="rgba(255,255,255,0.07)" strokeWidth="16" fill="none" strokeLinecap="round" />
-                <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="url(#gaugeGradient)" strokeWidth="16" fill="none" strokeLinecap="round"
-                  strokeDasharray={`${(riskPercent / 100) * 251.2} 251.2`} style={{ transition: 'stroke-dasharray 1s ease' }} />
-                <text x="100" y="88" textAnchor="middle" fontSize="28" fontWeight="bold" fill={riskColor}>{Math.round(riskPercent)}%</text>
-                <text x="100" y="104" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.5)">Risk Score</text>
+                <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="rgba(255,255,255,0.05)" strokeWidth="16" fill="none" strokeLinecap="round" />
+                <path d="M 20 100 A 80 80 0 0 1 180 100" stroke="url(#gaugeGradient)" strokeWidth="16" fill="none" strokeLinecap="round" filter="url(#neonGlow)"
+                  strokeDasharray={`${(riskPercent / 100) * 251.2} 251.2`} style={{ transition: 'stroke-dasharray 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }} />
+                <text x="100" y="88" textAnchor="middle" fontSize="32" fontWeight="800" fill={riskColor} className="risk-alert-pulse">{Math.round(riskPercent)}%</text>
+                <text x="100" y="104" textAnchor="middle" fontSize="10" fill="var(--text-muted)">Risk Score</text>
               </svg>
             </div>
-            <div className="risk-final-label" style={{ color: riskColor, borderColor: riskColor + '40', background: riskColor + '15' }}>
+            <div className="risk-final-label" style={{ zIndex: 1, position: 'relative', color: riskColor, borderColor: riskColor + '80', background: riskColor + '20', boxShadow: `0 0 15px ${riskColor}40` }}>
               {aggregation.final_risk} RISK
             </div>
-            <div className="risk-confidence">
+            <div className="risk-confidence" style={{ zIndex: 1, position: 'relative' }}>
               Confidence: <strong>{((aggregation.overall_confidence || 0) * 100).toFixed(1)}%</strong>
             </div>
           </div>
@@ -455,7 +454,7 @@ export default function ResultsPage({
             <div className="risk-gauge-title">Vitals Risk Profile</div>
             <ResponsiveContainer width="100%" height={220}>
               <RadarChart data={vitalsRadarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
-                <PolarGrid stroke="rgba(255,255,255,0.1)" />
+                <PolarGrid stroke="var(--radar-grid)" />
                 <PolarAngleAxis dataKey="subject" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
                 <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
                 <Radar name="Risk Index" dataKey="A" stroke={riskColor} fill={riskColor} fillOpacity={0.2} strokeWidth={2} />
@@ -476,7 +475,7 @@ export default function ResultsPage({
       {llmSummary && (
         <div className="llm-summary-card glass-panel">
           <div className="llm-header">
-            <span className="llm-icon">🤖</span>
+            <span className="llm-icon"><Bot size={28} /></span>
             <div>
               <h3>AI Clinical Interpretation</h3>
               <span className="llm-sub">Generated by clinical language model</span>
@@ -490,7 +489,7 @@ export default function ResultsPage({
       {ragReport && (
         <div className="rag-report-card glass-panel">
           <div className="llm-header">
-            <span className="llm-icon">💬</span>
+            <span className="llm-icon"><MessageSquare size={24} /></span>
             <div>
               <h3>RAG Symptom Analysis</h3>
               <span className="llm-sub">FAISS knowledge retrieval · Groq llama-3.3-70b-versatile</span>
@@ -524,7 +523,7 @@ export default function ResultsPage({
         <div className="clinician-feedback-card glass-panel">
           <div className="feedback-badge-header">
             <div className="feedback-title-group">
-              <span className="feedback-icon">🔒</span>
+              <Lock className="feedback-icon" size={24} />
               <h3>Diagnostic Attestation & Sign-off</h3>
             </div>
             <span className="status-badge-pending">Pending Review</span>
@@ -535,7 +534,7 @@ export default function ResultsPage({
           {feedbackStatus === 'success' ? (
             <div className="feedback-success-state">
               <div className="success-checkmark-circle">
-                <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" strokeWidth="3" fill="none"><polyline points="20 6 9 17 4 12" /></svg>
+                <CheckCircle2 size={32} />
               </div>
               <div>
                 <h4>Assessment Certified & Transmitted</h4>
@@ -545,7 +544,7 @@ export default function ResultsPage({
           ) : (
             <div className="feedback-actions-row">
               <button className="btn-certify" onClick={() => handleFeedback('accept')} disabled={feedbackStatus === 'submitting'}>
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><polyline points="20 6 9 17 4 12" /></svg>
+                <CheckCircle2 size={18} style={{ marginRight: '8px' }} />
                 Certify AI Prediction
               </button>
               <div className="feedback-divider"><span>OR</span></div>
@@ -556,7 +555,7 @@ export default function ResultsPage({
                   <option value="HIGH">High Risk</option>
                 </select>
                 <button className="btn-override" onClick={() => handleFeedback('override')} disabled={feedbackStatus === 'submitting'}>
-                  <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>
+                  <AlertTriangle size={18} style={{ marginRight: '8px' }} />
                   Submit Override
                 </button>
               </div>
@@ -565,10 +564,6 @@ export default function ResultsPage({
         </div>
       )}
 
-      {/* Hidden PDF template */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden', overflow: 'hidden' }}>
-        <div ref={reportRef}></div>
-      </div>
-    </div>
+    </motion.div>
   );
 }

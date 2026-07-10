@@ -1,67 +1,255 @@
 # Installation & Setup Guide
 
-This document contains everything you need to know to run the OmniHealth Diagnostics system.
-
-## Prerequisites
-- **Python** (v3.9 or higher)
-- **Node.js** (v16 or higher) and **NPM** (v8 or higher)
-
-The system is launched seamlessly using a single unified bash script, but you can also run the components manually.
-
-## Option 1: Run the Entire System (Recommended)
-
-You can launch both the Python Backend API and the React Frontend simultaneously using the startup script:
-
-1. Open your terminal.
-2. Navigate to the project root directory (`hcai_project`).
-3. Run the startup script:
-   ```bash
-   ./START_SYSTEM.sh
-   ```
-
-This will automatically:
-- Start the Flask backend on **`http://localhost:8000`** in the background.
-- Start the Vite React frontend server on **`http://localhost:5173`**.
-- Keep both running until you press `Ctrl+C`.
+This guide covers everything you need to install and run the OmniHealth Diagnostics system on both **macOS/Linux** and **Windows**.
 
 ---
 
-## Option 2: Manual Setup & Execution
+## Prerequisites
 
-If you prefer to start the components individually, follow these steps.
+| Requirement | Version | Notes |
+|---|---|---|
+| **Python** | 3.9 or higher | [python.org](https://www.python.org/downloads/) |
+| **Node.js** | 16 or higher | [nodejs.org](https://nodejs.org/) |
+| **NPM** | 8 or higher | Comes bundled with Node.js |
+| **Git** | Any recent version | For cloning the repo |
 
-### Step 1: Start the Python Backend API
-1. Navigate to the `hcai_project` directory:
-   ```bash
-   cd hcai_project
-   ```
-2. Create and activate a Python virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate  # Windows: .venv\Scripts\activate
-   ```
-3. Install the dependencies:
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-4. Start the Flask server:
-   ```bash
-   python3 api_server.py
-   ```
-   The backend will launch at **`http://localhost:8000`**.
+---
 
-### Step 2: Start the React Frontend Dashboard
-1. Open a new terminal window and navigate to the frontend directory:
-   ```bash
-   cd hcai_project/ui
-   ```
-2. Install npm dependencies (if this is your first time):
-   ```bash
-   npm install
-   ```
-3. Start the React development server:
-   ```bash
-   npm run dev
-   ```
-   The dashboard will automatically open in your browser at **`http://localhost:5173`**.
+## Step 1 — Clone the Repository
+
+```bash
+git clone <your-repo-url>
+cd hcai_project
+```
+
+---
+
+## Step 2 — Set Up Your API Key
+
+Create a `.env` file in the `hcai_project/` root directory:
+
+**Mac/Linux:**
+```bash
+echo "GROQ_API_KEY=your_groq_api_key_here" > .env
+```
+
+**Windows (Command Prompt):**
+```cmd
+echo GROQ_API_KEY=your_groq_api_key_here > .env
+```
+
+**Windows (PowerShell):**
+```powershell
+"GROQ_API_KEY=your_groq_api_key_here" | Out-File -Encoding utf8 .env
+```
+
+> Get a free key at [console.groq.com](https://console.groq.com).
+
+---
+
+## Step 3 — Set Up the Python Virtual Environment
+
+### Mac / Linux
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Windows (Command Prompt)
+
+```cmd
+python -m venv .venv
+.venv\Scripts\activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+> **Windows PowerShell note:** If you get an "execution policy" error, run this first:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+
+---
+
+## Step 4 — Install Frontend Dependencies
+
+```bash
+cd ui
+npm install
+cd ..
+```
+
+This is the same on Mac, Linux, and Windows.
+
+---
+
+## Option A: Run the Entire System (Recommended)
+
+### Mac / Linux
+
+```bash
+./START_SYSTEM.sh
+```
+
+> If you get a "permission denied" error, make the script executable first:
+> ```bash
+> chmod +x START_SYSTEM.sh
+> ./START_SYSTEM.sh
+> ```
+
+### Windows
+
+Windows does not run `.sh` scripts natively. Use **one of these options**:
+
+**Option 1 — Git Bash** (recommended, comes with Git for Windows):
+```bash
+bash START_SYSTEM.sh
+```
+
+**Option 2 — WSL (Windows Subsystem for Linux):**
+```bash
+bash START_SYSTEM.sh
+```
+
+**Option 3 — Run components manually** (see Option B below).
+
+---
+
+Once the system starts, you will see:
+
+```
+==========================================================
+🩺 OmniHealth Diagnostics: Multi-Agent Triage Dashboard
+==========================================================
+✅ Backend API is running in background (PID: XXXX)
+
+🚀 System is launching!
+   - Backend API: http://localhost:8000
+   - Frontend UI: http://localhost:5173
+
+Press Ctrl+C to stop both servers.
+```
+
+Open **http://localhost:5173** in your browser.
+
+---
+
+## Option B: Manual Setup (Two Terminals)
+
+Use this if you prefer running components separately, or if you are on Windows without Git Bash/WSL.
+
+### Terminal 1 — Start the Backend
+
+**Mac / Linux:**
+```bash
+source .venv/bin/activate
+python3 api_server.py
+```
+
+**Windows (CMD):**
+```cmd
+.venv\Scripts\activate
+python api_server.py
+```
+
+**Windows (PowerShell):**
+```powershell
+.venv\Scripts\Activate.ps1
+python api_server.py
+```
+
+The backend will start at **http://localhost:8000**.
+
+---
+
+### Terminal 2 — Start the Frontend
+
+```bash
+cd ui
+npm run dev
+```
+
+This is identical on Mac, Linux, and Windows.
+
+The frontend will start at **http://localhost:5173**.
+
+---
+
+## Verifying the System is Running
+
+Check the backend health endpoint:
+
+**Mac / Linux:**
+```bash
+curl http://localhost:8000/health
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+```
+
+You should see a response like:
+```json
+{
+  "status": "healthy",
+  "agents": {
+    "cardiac": true,
+    "respiratory": true,
+    "sepsis": true,
+    "general": true
+  }
+}
+```
+
+---
+
+## Stopping the System
+
+- **If using `START_SYSTEM.sh`:** Press `Ctrl+C` in the terminal. Both backend and frontend will shut down automatically.
+- **If running manually:** Press `Ctrl+C` in each terminal window.
+
+---
+
+## Rebuilding the RAG Knowledge Base Index
+
+Only needed if you update `agents/Rag_Chatbot/knowledge_base_new.json`:
+
+**Mac / Linux:**
+```bash
+source .venv/bin/activate
+python agents/Rag_Chatbot/rag/build_index.py
+```
+
+**Windows:**
+```cmd
+.venv\Scripts\activate
+python agents\Rag_Chatbot\rag\build_index.py
+```
+
+Then restart the backend.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `source: no such file or directory: venv/bin/activate` | Use `.venv` not `venv`: `source .venv/bin/activate` |
+| `ModuleNotFoundError` | Make sure the venv is activated before running Python |
+| Port 8000 or 5173 already in use | Kill the existing process: `lsof -ti:8000 \| xargs kill` (Mac/Linux) or `netstat -ano \| findstr :8000` then `taskkill /PID <pid> /F` (Windows) |
+| Frontend shows blank page | Run `cd ui && npm install` then restart |
+| RAG chatbot returns "unavailable" | Install missing packages: `pip install faiss-cpu sentence-transformers` |
+| PowerShell execution policy error | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` |

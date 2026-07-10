@@ -7,10 +7,10 @@ except ImportError:
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from respiratory_agent_api import RespiratoryAgent
-from general_agent_api_xgboost import GeneralHealthAgent
-from cardiac_agent_api import CardiacAgent
-from sepsis_agent_api import SepsisAgent
+from agents.respiratory_agent_api import RespiratoryAgent
+from agents.general_agent_api_xgboost import GeneralHealthAgent
+from agents.cardiac_agent_api import CardiacAgent
+from agents.sepsis_agent_api import SepsisAgent
 import logging
 from datetime import datetime
 import json
@@ -128,6 +128,32 @@ def clean_and_impute_patient_data(data: dict) -> dict:
     for k, v in data.items():
         if v is not None and v != "" and not (isinstance(v, str) and v.strip() == ""):
             cleaned[k] = v
+            
+    # Auto-calculate age_group if age is present
+    if 'age' in cleaned:
+        try:
+            age_val = float(cleaned['age'])
+            if age_val < 18:
+                cleaned['age_group'] = 'pediatric'
+            elif age_val < 50:
+                cleaned['age_group'] = 'adult'
+            elif age_val < 65:
+                cleaned['age_group'] = 'senior'
+            else:
+                cleaned['age_group'] = 'elderly'
+        except (ValueError, TypeError):
+            pass
+
+    # Ensure required default fields to prevent validation errors for optional/imputed parameters
+    if 'pain_score' not in cleaned:
+        cleaned['pain_score'] = 0.0
+    if 'altered_mentation' not in cleaned:
+        cleaned['altered_mentation'] = 0
+    if 'chest_pain' not in cleaned:
+        cleaned['chest_pain'] = 0
+    if 'diabetes' not in cleaned:
+        cleaned['diabetes'] = 0
+
     return cleaned
 
 def log_to_safety_audit(patient_id, prediction, confidence, trust_score, safety_status, human_review_required, triage_mode='IMMEDIATE'):

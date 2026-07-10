@@ -142,7 +142,7 @@ const PdfReportTemplate = React.forwardRef(({ fullReport, patientData, predictio
                   <XAxis type="number" hide />
                   <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} style={{ fontSize: '12px', fill: '#475569' }} />
                   <Tooltip cursor={{ fill: '#f1f5f9' }} />
-                  <Bar dataKey="impact" radius={[0, 4, 4, 0]} barSize={20}>
+                  <Bar dataKey="impact" radius={[0, 4, 4, 0]} barSize={20} isAnimationActive={false}>
                     {shapData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.direction === 'positive' ? riskColor : '#3b82f6'} />
                     ))}

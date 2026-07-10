@@ -3,6 +3,22 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  Settings2, 
+  TrendingDown, 
+  TrendingUp, 
+  Play, 
+  XSquare, 
+  Activity, 
+  Wind, 
+  Bug, 
+  ShieldCheck, 
+  AlertTriangle,
+  SlidersHorizontal,
+  ClipboardCheck
+} from 'lucide-react';
+import emptySimulatorImg from '../assets/empty-simulator.png';
 
 const CLINICAL_RANGES = {
   spo2:             { min: 70,  max: 100,  step: 1    },
@@ -96,22 +112,27 @@ function getOverallRiskPercent(aggregation) {
 // Mini Gauge SVG
 // ────────────────────────────────────────────────────────────────────────────
 function MiniGauge({ percent, color }) {
-  const ARC_LEN = 220;
-  const dash = Math.max(0, Math.min(1, percent / 100)) * ARC_LEN;
+  const radius = 35;
+  const circumference = 2 * Math.PI * radius;
+  const dash = Math.max(0, Math.min(1, percent / 100)) * circumference;
   return (
-    <svg viewBox="0 0 120 70" width="120" height="70" style={{ overflow: 'visible' }}>
-      <defs>
-        <linearGradient id="simGaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#10b981" />
-          <stop offset="50%" stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#ef4444" />
-        </linearGradient>
-      </defs>
-      <path d="M 10 62 A 50 50 0 0 1 110 62" stroke="rgba(255,255,255,0.07)" strokeWidth="10" fill="none" strokeLinecap="round" />
-      <path d="M 10 62 A 50 50 0 0 1 110 62" stroke="url(#simGaugeGrad)" strokeWidth="10" fill="none" strokeLinecap="round"
-        strokeDasharray={`${dash} ${ARC_LEN}`} style={{ transition: 'stroke-dasharray 0.6s ease' }} />
-      <text x="60" y="57" textAnchor="middle" fontSize="16" fontWeight="bold" fill={color}>{percent}%</text>
-    </svg>
+    <div className="ring-gauge-container" style={{ width: 80, height: 80 }}>
+      <svg viewBox="0 0 80 80" width="80" height="80" style={{ transform: 'rotate(-90deg)', overflow: 'visible' }}>
+        <defs>
+          <filter id="miniNeonGlow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+        <circle cx="40" cy="40" r={radius} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
+        <circle cx="40" cy="40" r={radius} fill="none" stroke={color} strokeWidth="6" strokeLinecap="round" filter="url(#miniNeonGlow)"
+          strokeDasharray={`${dash} ${circumference}`} style={{ transition: 'stroke-dasharray 1s cubic-bezier(0.175, 0.885, 0.32, 1.275)' }} />
+      </svg>
+      <div className="ring-gauge-value" style={{ color }}>{percent}<span style={{ fontSize: '0.6rem' }}>%</span></div>
+    </div>
   );
 }
 
@@ -169,7 +190,8 @@ function SimSlider({ name, label, unit, value, baselineValue, onChange, isSweepT
           onClick={() => onSetSweep(name)}
           title="Set as sensitivity sweep parameter"
         >
-          {isSweepTarget ? '📈 Sweeping' : '📈 Sweep'}
+          <TrendingUp size={12} style={{ marginRight: 4 }} />
+          {isSweepTarget ? 'Sweeping' : 'Sweep'}
         </button>
         <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', opacity: 0.6 }}>{config.max}{unit}</span>
       </div>
@@ -198,13 +220,13 @@ export default function SimulatorPage({
   // ── Guard ────────────────────────────────────────────────────────────────
   if (!predictions) {
     return (
-      <div className="page-container animate-fade-in">
-        <div className="empty-state glass-panel" style={{ margin: 'auto', maxWidth: 600 }}>
-          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🎛️</div>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="page-container">
+        <div className="empty-state glass-panel" style={{ margin: 'auto', maxWidth: 600, textAlign: 'center' }}>
+          <img src={emptySimulatorImg} alt="Simulator Not Available" style={{ width: '100%', maxWidth: '280px', marginBottom: '1.5rem', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.1)' }} />
           <h2>Simulator Not Available</h2>
           <p>Please complete a <strong>Triage Intake</strong> analysis first, then return here to explore what-if scenarios.</p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -341,7 +363,7 @@ export default function SimulatorPage({
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="page-container animate-fade-in">
+    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="page-container">
       {/* ── Header ── */}
       <div className="page-header">
         <div>
@@ -352,21 +374,23 @@ export default function SimulatorPage({
           {isWhatIfMode && (
             <>
               <button className="btn outline sim-preset-btn deteriorate" onClick={() => applyPreset('deteriorate')}>
-                📉 Deteriorate
+                <TrendingDown size={14} style={{ marginRight: '6px' }} />
+                Deteriorate
               </button>
               <button className="btn outline sim-preset-btn improve" onClick={() => applyPreset('improve')}>
-                📈 Improve
+                <TrendingUp size={14} style={{ marginRight: '6px' }} />
+                Improve
               </button>
             </>
           )}
           {!isWhatIfMode ? (
             <button className="btn primary" onClick={handleEnterSim} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <Play size={16} fill="currentColor" />
               Enter Simulation
             </button>
           ) : (
             <button className="btn outline" onClick={handleExitSim} style={{ borderColor: '#ef4444', color: '#ef4444', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              <XSquare size={16} />
               Exit &amp; Restore
             </button>
           )}
@@ -374,18 +398,18 @@ export default function SimulatorPage({
       </div>
 
       {!isWhatIfMode ? (
-        <div className="sim-inactive-prompt glass-panel">
-          <div style={{ fontSize: '3rem', marginBottom: '1rem', opacity: 0.7 }}>🎛️</div>
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="sim-inactive-prompt glass-panel" style={{ textAlign: 'center' }}>
+          <img src={emptySimulatorImg} alt="Ready to Simulate" style={{ width: '100%', maxWidth: '280px', marginBottom: '1.5rem', borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', opacity: 0.9 }} />
           <h3>Ready to Simulate</h3>
           <p>Click <strong>Enter Simulation</strong> to start adjusting vitals and observe real-time risk shifts. The current patient state is saved as a baseline and fully restored on exit.</p>
-        </div>
+        </motion.div>
       ) : (
         <div className="sim-active-layout">
 
           {/* ── LEFT: Sliders ── */}
-          <div className="sim-sliders-panel glass-panel">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="sim-sliders-panel glass-panel">
             <div className="sim-panel-title">
-              <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2" fill="none"><circle cx="12" cy="12" r="3"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="21" y2="12"/><line x1="12" y1="3" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="21"/></svg>
+              <SlidersHorizontal size={16} />
               Adjust Vitals
               {loading && <span style={{ marginLeft: 'auto', fontSize: '0.65rem', color: '#60a5fa', animation: 'pulse 1s infinite' }}>updating…</span>}
             </div>
@@ -427,7 +451,7 @@ export default function SimulatorPage({
               <div className="sim-critical-alerts">
                 {criticalAlerts.map((a, i) => (
                   <div key={i} className="sim-crit-alert-row">
-                    <span>🚨</span>
+                    <AlertTriangle size={16} color="#ef4444" />
                     <span><strong>{a.name}</strong> {a.val} is {a.dir} critical threshold ({a.threshold})</span>
                   </div>
                 ))}
@@ -478,10 +502,10 @@ export default function SimulatorPage({
                 />
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* ── RIGHT: Charts ── */}
-          <div className="sim-charts-panel">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="sim-charts-panel">
 
             {/* Tab nav */}
             <div className="tab-navigation" style={{ marginBottom: '1rem' }}>
@@ -498,7 +522,7 @@ export default function SimulatorPage({
 
             {/* ── Risk Shift bar chart ── */}
             {insightsTab === 'subsystem' && (
-              <div className="glass-panel sim-chart-card animate-fade-in">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel sim-chart-card">
                 <div className="sim-chart-title">Sub-System High-Risk Probability: Baseline vs Simulated</div>
                 {riskShiftData.every(d => d.Baseline === 0 && d.Simulated === 0) ? (
                   <div className="sim-no-data">All agents show low risk. Try deteriorating vitals to see the shift.</div>
@@ -529,12 +553,12 @@ export default function SimulatorPage({
                   <span style={{ color: '#ef4444' }}>■ Red</span> = risk increased &nbsp;
                   <span style={{ color: '#3b82f6' }}>■ Blue</span> = minimal change
                 </div>
-              </div>
+              </motion.div>
             )}
 
             {/* ── Sensitivity curve ── */}
             {insightsTab === 'sensitivity' && (
-              <div className="glass-panel sim-chart-card animate-fade-in">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel sim-chart-card">
                 <div className="sim-chart-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
                   <span>Sensitivity Curve — How risk responds to <em>{PARAM_LABELS[sensitivityParam]}</em></span>
                   <select
@@ -551,7 +575,7 @@ export default function SimulatorPage({
                 {sensitivityData.length > 0 ? (
                   <>
                     <ResponsiveContainer width="100%" height={260}>
-                      <AreaChart data={sensitivityData} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
+                      <AreaChart data={sensitivityData} margin={{ top: 10, right: 35, left: 0, bottom: 30 }}>
                         <defs>
                           <linearGradient id="colorRisk" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.35} />
@@ -595,25 +619,25 @@ export default function SimulatorPage({
                     Loading sensitivity data — please wait a moment…
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* ── Agent Score Breakdown ── */}
             {insightsTab === 'agents' && (
-              <div className="glass-panel sim-chart-card animate-fade-in">
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-panel sim-chart-card">
                 <div className="sim-chart-title">Live Agent Risk Probabilities</div>
                 <div className="sim-agent-breakdown">
                   {[
-                    { key: 'respiratory', label: 'Respiratory', icon: '🫁' },
-                    { key: 'cardiac',     label: 'Cardiac',     icon: '❤️' },
-                    { key: 'sepsis',      label: 'Sepsis',      icon: '🦠' },
-                    { key: 'general',     label: 'General',     icon: '🛡️' },
+                    { key: 'respiratory', label: 'Respiratory', icon: <Wind size={16} /> },
+                    { key: 'cardiac',     label: 'Cardiac',     icon: <Activity size={16} /> },
+                    { key: 'sepsis',      label: 'Sepsis',      icon: <Bug size={16} /> },
+                    { key: 'general',     label: 'General',     icon: <ShieldCheck size={16} /> },
                   ].map(({ key, label, icon }) => {
                     const cur = predictions?.[key];
                     const base = baselinePredictions?.[key];
                     if (!cur || cur.status === 'error') return (
                       <div key={key} className="sim-agent-row error">
-                        <span>{icon} {label}</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{icon} {label}</span>
                         <span style={{ fontSize: '0.75rem', color: '#ef4444' }}>unavailable</span>
                       </div>
                     );
@@ -652,12 +676,12 @@ export default function SimulatorPage({
                     );
                   })}
                 </div>
-              </div>
+              </motion.div>
             )}
 
-          </div>{/* end sim-charts-panel */}
+          </motion.div>{/* end sim-charts-panel */}
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }

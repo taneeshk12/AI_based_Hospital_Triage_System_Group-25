@@ -1,0 +1,239 @@
+/* =========================================================================
+   CLINICAL THEME — Dark Mode Only
+   ========================================================================= */
+
+/* ── App shell & background ── */
+.app-shell {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+}
+
+.glow-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 50%, rgba(2, 132, 199, 0.03), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(13, 148, 136, 0.03), transparent 50%);
+  transition: all 1s ease-in-out;
+}
+
+.app-shell.theme-critical .glow-bg {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(220, 38, 38, 0.05), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(239, 68, 68, 0.03), transparent 50%);
+}
+
+.app-shell.theme-warning .glow-bg {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(217, 119, 6, 0.05), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(245, 158, 11, 0.03), transparent 50%);
+}
+
+.app-shell.theme-safe .glow-bg {
+  background:
+    radial-gradient(circle at 15% 50%, rgba(5, 150, 105, 0.05), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.03), transparent 50%);
+}
+
+/* ── Glass panels ── */
+.glass-panel {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -2px rgba(0, 0, 0, 0.15) !important;
+  border-radius: 12px !important;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.glass-panel:hover {
+  border-color: rgba(59, 130, 246, 0.3) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* ── Form inputs ── */
+.intake-input-group input,
+.intake-input-group select,
+.intake-input-group textarea {
+  background: var(--input-bg) !important;
+  border: 1px solid var(--input-border) !important;
+  color: var(--text-primary) !important;
+  border-radius: 6px;
+  padding: 8px 12px;
+  transition: all 0.2s ease !important;
+  font-weight: 500;
+}
+
+.intake-input-group input:focus,
+.intake-input-group select:focus,
+.intake-input-group textarea:focus {
+  border-color: var(--accent-blue) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2) !important;
+  background: var(--input-focus-bg) !important;
+  outline: none;
+}
+
+/* ── Tabs ── */
+.intake-tabs {
+  background: var(--tab-nav-bg) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 4px !important;
+  border-radius: 8px !important;
+  display: flex;
+  gap: 4px;
+}
+
+.intake-tab-btn {
+  color: var(--tab-btn-color) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+  font-weight: 600 !important;
+  padding: 6px 12px;
+}
+
+.intake-tab-btn.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--accent-blue) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ── ECG animation ── */
+@keyframes drawPulse {
+  0% { stroke-dashoffset: 100; }
+  100% { stroke-dashoffset: 0; }
+}
+.ecg-line {
+  stroke-dasharray: 100;
+  animation: drawPulse 2s infinite linear;
+  stroke-width: 2px;
+}
+
+.risk-alert-pulse {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* ── Sliders ── */
+.sim-slider-group {
+  background: var(--input-bg);
+  border-radius: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.sim-slider-group:hover {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.sim-slider-track-wrapper {
+  height: 6px !important;
+  background: var(--shap-track-bg) !important;
+  border-radius: 3px !important;
+  overflow: hidden;
+}
+
+.sim-slider-fill {
+  background-color: var(--accent-blue) !important;
+}
+
+.whatif-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent-blue);
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.2s ease;
+}
+
+.whatif-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+/* ── Ring gauge ── */
+.ring-gauge-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ring-gauge-value {
+  position: absolute;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ── Navigation ── */
+.sidebar-logo {
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2) !important;
+  border-radius: 8px !important;
+  animation: none !important;
+}
+
+.sidebar-nav-item.active {
+  background: rgba(59, 130, 246, 0.1) !important;
+  border-left: 4px solid var(--accent-blue) !important;
+  border-radius: 0 6px 6px 0 !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  border-right: none !important;
+  color: var(--accent-blue) !important;
+  font-weight: 600;
+}
+
+/* ── Topbar ── */
+.topbar {
+  background: var(--card-bg) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* ── Buttons ── */
+.btn.primary {
+  background: var(--accent-blue) !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+
+.btn.primary:hover {
+  background: #2563eb !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4) !important;
+}
+
+.btn.outline {
+  border: 1px solid var(--accent-blue) !important;
+  color: var(--accent-blue) !important;
+  background: transparent !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+}
+
+.btn.outline:hover {
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* ── Status dot ── */
+.topbar-api-status.online .topbar-status-dot {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  animation: none !important;
+}
+
+/* ── Feature cards ── */
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3) !important;
+  border-color: rgba(59, 130, 246, 0.3) !important;
+}

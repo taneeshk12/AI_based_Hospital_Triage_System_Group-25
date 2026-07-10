@@ -11,7 +11,9 @@ import SimulatorPage from './pages/SimulatorPage';
 import RegistryPage from './pages/RegistryPage';
 import SettingsPage from './pages/SettingsPage';
 import EvaluationPage from './pages/EvaluationPage';
+import LandingPage from './pages/LandingPage';
 import './App.css';
+import './ClinicalTheme.css';
 
 // ── Error Boundary: catches render crashes and shows a fallback instead of blank page ──
 class ErrorBoundary extends Component {
@@ -110,7 +112,7 @@ const INITIAL_PATIENT_DATA = {
 
 function App() {
   // ── Navigation ───────────────────────────────────────────────────────────
-  const [activePage, setActivePage] = useState('intake');
+  const [activePage, setActivePage] = useState('landing');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // ── Patient Identity ──────────────────────────────────────────────────────
@@ -143,9 +145,12 @@ function App() {
   const [expandedAgents, setExpandedAgents] = useState({});
   const [ragReport, setRagReport] = useState(null);
 
-  // ── API & Theme ───────────────────────────────────────────────────────────
+  // ── API & Theme ──────────────────────────────────────────────────────────
   const [apiStatus, setApiStatus] = useState(false);
-  const [isLightMode, setIsLightMode] = useState(false);
+  // Read saved preference; default to light if none stored
+  const [isLightMode, setIsLightMode] = useState(
+    () => localStorage.getItem('omnihealth-theme') !== 'dark'
+  );
 
   // ── Simulator ─────────────────────────────────────────────────────────────
   const [isWhatIfMode, setIsWhatIfMode] = useState(false);
@@ -205,10 +210,15 @@ function App() {
 
 
 
-  // ── Theme effect ──────────────────────────────────────────────────────────
+  // ── Theme effect ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (isLightMode) document.body.setAttribute('data-theme', 'light');
-    else document.body.removeAttribute('data-theme');
+    if (isLightMode) {
+      document.body.setAttribute('data-theme', 'light');
+      localStorage.setItem('omnihealth-theme', 'light');
+    } else {
+      document.body.removeAttribute('data-theme');
+      localStorage.setItem('omnihealth-theme', 'dark');
+    }
   }, [isLightMode]);
 
   // ── Auto pain score + age group ───────────────────────────────────────────
@@ -506,23 +516,14 @@ function App() {
       setFeedbackStatus('submitting');
       Object.assign(el.style, { position: 'absolute', left: '0', top: '0', zIndex: '-9999', visibility: 'visible' });
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
-      const pdf = new jsPDF('p', 'pt', 'a4');
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
+      // Calculate exact dimensions in points based on the DOM element's scale
+      const pdfWidth = el.offsetWidth;
+      const pdfHeight = el.offsetHeight;
+      
+      const pdf = new jsPDF('p', 'pt', [pdfWidth, pdfHeight]);
       const imgData = canvas.toDataURL('image/jpeg', 1.0);
-      const imgHeight = (canvas.height * pw) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, pw, imgHeight);
-      heightLeft -= ph;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pw, imgHeight);
-        heightLeft -= ph;
-      }
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
 
       pdf.save(`${fullReport.report_id || 'triage_report'}.pdf`);
     } catch (err) { console.error('PDF error:', err); }
@@ -532,6 +533,8 @@ function App() {
   // ── Page renderer ─────────────────────────────────────────────────────────
   const renderPage = () => {
     switch (activePage) {
+      case 'landing':
+        return <LandingPage setActivePage={setActivePage} />;
       case 'intake':
         return (
           <ErrorBoundary>
@@ -547,6 +550,12 @@ function App() {
               setRagReport={setRagReport}
               triageMode={triageMode}
               setTriageMode={setTriageMode}
+              patientName={patientName}
+              setPatientName={setPatientName}
+              currentPatientId={currentPatientId}
+              saveStatus={saveStatus}
+              onSave={handleSavePatient}
+              onNewPatient={handleNewPatient}
             />
           </ErrorBoundary>
         );
@@ -645,8 +654,16 @@ function App() {
     }
   };
 
+  // Determine the dynamic theme class based on global risk
+  let themeClass = 'theme-safe';
+  if (aggregation?.final_risk) {
+    const risk = aggregation.final_risk.toUpperCase();
+    if (risk.includes('HIGH')) themeClass = 'theme-critical';
+    else if (risk.includes('MED') || risk.includes('MID')) themeClass = 'theme-warning';
+  }
+
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${themeClass}`}>
       <div className="glow-bg"></div>
 
       <Sidebar
@@ -661,16 +678,9 @@ function App() {
       <div className="app-main">
         <TopBar
           activePage={activePage}
-          patientName={patientName}
-          setPatientName={setPatientName}
-          currentPatientId={currentPatientId}
           apiStatus={apiStatus}
           isLightMode={isLightMode}
           setIsLightMode={setIsLightMode}
-          saveStatus={saveStatus}
-          onSave={handleSavePatient}
-          onNewPatient={handleNewPatient}
-          loading={loading}
         />
 
         <main className="page-content">
